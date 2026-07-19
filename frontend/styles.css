@@ -9813,6 +9813,15 @@ select.invalid:focus {
   justify-content: center;
 }
 
+/* Reserve the full height of the mounted sign-in form (measured 581px) so the
+   spinner→form swap doesn't shift the centered panel (CLS). Tall screens only —
+   on the 640×360 TSC5 the panel scrolls and the big reserve would overflow. */
+@media (min-height: 700px) {
+  .auth-form-wrapper {
+    min-height: 580px;
+  }
+}
+
 .login-loading {
   display: flex;
   flex-direction: column;

@@ -18,7 +18,9 @@ export default defineConfig({
           if (assetInfo.name && assetInfo.name.endsWith('.css')) {
             return 'assets/[name]-[hash:8].css';
           }
-          return 'assets/[name][extname]';
+          // Hash everything under /assets/ — vercel.json serves that path with
+          // Cache-Control: immutable, which is only safe for fingerprinted files.
+          return 'assets/[name]-[hash:8][extname]';
         },
         manualChunks: (id) => {
           if (id.includes('node_modules')) {

@@ -24,7 +24,9 @@
 // survey chunks (new chunk graph).
 // v137: register-sw no longer reloads the page on first SW install (the
 // controllerchange reload made every fresh visit boot twice).
-const APP_VERSION = 'v137';
+// v138: get-session preload in index.html, login-form CLS reserve in styles.css,
+// immutable cache headers for /assets + /fonts.
+const APP_VERSION = 'v138';
 const PRECACHE = 'graph-sketch-shell-' + APP_VERSION;
 const RUNTIME = 'graph-sketch-runtime-' + APP_VERSION;
 
