@@ -1978,7 +1978,14 @@ window.__scheduleDraw = scheduleDraw;
 // TSC3 Survey Device Integration
 // ============================================
 // [Extracted to src/legacy/tsc3-handlers.js — lazy-loaded]
-import('./tsc3-handlers.js').then(m => m.initTSC3Handlers());
+// Deferred to idle: TSC3 connections are user-initiated well after boot, so the
+// survey chunk shouldn't compete with first paint / first interaction.
+const loadTSC3 = () => import('./tsc3-handlers.js').then(m => m.initTSC3Handlers());
+if ('requestIdleCallback' in window) {
+  requestIdleCallback(loadTSC3, { timeout: 5000 });
+} else {
+  setTimeout(loadTSC3, 3000);
+}
 
 // Admin/Projects screen handlers
 // [Extracted to src/legacy/admin-handlers.js]

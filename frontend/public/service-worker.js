@@ -19,7 +19,10 @@
 // v133: dev and feature/v2-smart-field both bumped to v132 independently
 // (production already serves v132) — the merged result must go higher.
 // v135: styles.css changed (read-only banner CSS in 21668d5) without a bump.
-const APP_VERSION = 'v135';
+// v136: perf pass — self-hosted Inter (Google Fonts CSS removed from index.html),
+// font/logo preloads, unified-layout class baked into HTML, lazy React/Leaflet/
+// survey chunks (new chunk graph).
+const APP_VERSION = 'v136';
 const PRECACHE = 'graph-sketch-shell-' + APP_VERSION;
 const RUNTIME = 'graph-sketch-runtime-' + APP_VERSION;
 
@@ -46,7 +49,9 @@ const PRECACHE_ASSETS = [
   OFFLINE_URL,
   withBase('manifest.json'),
   withBase('fonts/material-icons.woff2'),
+  withBase('fonts/inter-latin-var.woff2'),
   withBase('app_icon.png'),
+  withBase('geopoint_logo.png'),
   withBase('health/index.html')
 ];
 

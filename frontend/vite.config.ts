@@ -35,24 +35,19 @@ export default defineConfig({
             if (id.includes('proj4') || id.includes('mgrs') || id.includes('wkt-parser')) {
               return 'proj4-vendor';
             }
+            // Leaflet + Geoman (~350KB minified) are only used by the lazily
+            // imported annotation layer — keep them out of the eager vendor chunk.
+            if (id.includes('leaflet') || id.includes('geoman')) {
+              return 'leaflet-vendor';
+            }
             return 'vendor';
           }
-          // Lazy-loaded admin modules get their own chunk
-          if (id.includes('/admin/admin-settings') || id.includes('/admin/projects-settings') || id.includes('/admin/input-flow-settings')) {
-            return 'admin';
-          }
-          // Lazy-loaded cockpit module
-          if (id.includes('/cockpit/')) {
-            return 'cockpit';
-          }
-          // Lazy-loaded field-commander module
-          if (id.includes('/field-commander/')) {
-            return 'field-commander';
-          }
-          // Lazy-loaded survey/TSC3 modules
-          if (id.includes('/survey/') || id.includes('tsc3-handlers')) {
-            return 'survey';
-          }
+          // App code is NOT manually chunked. Forcing dynamically-imported app
+          // modules (survey/admin/cockpit/…) into named chunks made Rollup drag
+          // their shared deps (i18n, db, auth, gnss, map, …) into those chunks,
+          // turning them into STATIC deps of the entry — ~1.5MB of "lazy" JS
+          // executed on every startup. Rollup's automatic chunking splits
+          // dynamic imports correctly on its own.
         },
       },
     },

@@ -7,7 +7,6 @@
  * Calls cross-module functions through the shared F registry.
  */
 
-import { mountSignIn as _mountSignIn, mountSignUp as _mountSignUp } from '../auth/auth-provider.jsx';
 import { S, F } from './shared-state.js';
 import {
   isProjectCanvasMode,
@@ -104,14 +103,20 @@ export function hideAuthLoading() {
 }
 
 // ── Mount auth components ───────────────────────────────────────────────
+// auth-provider.jsx pulls in React (~190KB); loading it lazily keeps React
+// off the startup critical path — signed-in users never need the login form.
 export function mountAuthSignIn() {
   if (!authContainer) return;
-  _mountSignIn(authContainer, { signUpUrl: '#/signup' });
+  import('../auth/auth-provider.jsx').then(({ mountSignIn }) => {
+    mountSignIn(authContainer, { signUpUrl: '#/signup' });
+  });
 }
 
 export function mountAuthSignUp() {
   if (!authContainer) return;
-  _mountSignUp(authContainer, { signInUrl: '#/login' });
+  import('../auth/auth-provider.jsx').then(({ mountSignUp }) => {
+    mountSignUp(authContainer, { signInUrl: '#/login' });
+  });
 }
 
 // ── Update user button visibility ───────────────────────────────────────

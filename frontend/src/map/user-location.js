@@ -4,7 +4,6 @@
  * plus standalone accuracy-circle renderers (canvas + Leaflet).
  */
 
-import L from 'leaflet';
 import { wgs84ToItm } from './govmap-layer.js';
 
 // ============================================================================
@@ -425,10 +424,14 @@ export const drawAccuracyCircle = (ctx, centerX, centerY, accuracyMeters, scale,
 
 /**
  * Leaflet-based accuracy circle factory. Adds the circle to the map and
- * returns the circle instance (or null on invalid input).
+ * resolves to the circle instance (or null on invalid input).
+ * Async: Leaflet is loaded on demand so it stays off the startup bundle
+ * (a static `import L from 'leaflet'` here kept ~350KB of Leaflet+Geoman
+ * on the critical path — this module loads at boot for geolocation).
  */
-export const createAccuracyCircle = (map, latlng, accuracyMeters, options = {}) => {
+export const createAccuracyCircle = async (map, latlng, accuracyMeters, options = {}) => {
   if (!map || !accuracyMeters || accuracyMeters <= 0) return null;
+  const { default: L } = await import('leaflet');
 
   const {
     color = 'blue',

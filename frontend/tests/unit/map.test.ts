@@ -47,25 +47,25 @@ describe('createAccuracyCircle()', () => {
     vi.clearAllMocks();
   });
 
-  it('returns null when map is missing', () => {
-    expect(createAccuracyCircle(null, latlng, 5)).toBeNull();
+  it('returns null when map is missing', async () => {
+    expect(await createAccuracyCircle(null, latlng, 5)).toBeNull();
     expect(L.circle).not.toHaveBeenCalled();
   });
 
-  it('returns null for zero accuracy', () => {
-    expect(createAccuracyCircle(mapStub, latlng, 0)).toBeNull();
+  it('returns null for zero accuracy', async () => {
+    expect(await createAccuracyCircle(mapStub, latlng, 0)).toBeNull();
   });
 
-  it('returns null for negative accuracy', () => {
-    expect(createAccuracyCircle(mapStub, latlng, -3)).toBeNull();
+  it('returns null for negative accuracy', async () => {
+    expect(await createAccuracyCircle(mapStub, latlng, -3)).toBeNull();
   });
 
-  it('returns null for null accuracy', () => {
-    expect(createAccuracyCircle(mapStub, latlng, null)).toBeNull();
+  it('returns null for null accuracy', async () => {
+    expect(await createAccuracyCircle(mapStub, latlng, null)).toBeNull();
   });
 
-  it('creates a circle with radius equal to accuracy in meters', () => {
-    const circle = createAccuracyCircle(mapStub, latlng, 5);
+  it('creates a circle with radius equal to accuracy in meters', async () => {
+    const circle = await createAccuracyCircle(mapStub, latlng, 5);
     expect(circle).not.toBeNull();
     expect(L.circle).toHaveBeenCalledTimes(1);
     const [passedLatlng, opts] = vi.mocked(L.circle).mock.calls[0] as any[];
@@ -73,8 +73,8 @@ describe('createAccuracyCircle()', () => {
     expect(opts.radius).toBe(5);
   });
 
-  it('applies default styling (blue, weight 2, 0.15 fill opacity)', () => {
-    createAccuracyCircle(mapStub, latlng, 10);
+  it('applies default styling (blue, weight 2, 0.15 fill opacity)', async () => {
+    await createAccuracyCircle(mapStub, latlng, 10);
     const opts = (vi.mocked(L.circle).mock.calls[0] as any[])[1];
     expect(opts.color).toBe('blue');
     expect(opts.weight).toBe(2);
@@ -82,20 +82,20 @@ describe('createAccuracyCircle()', () => {
     expect(opts.fillColor).toBe('rgba(74, 144, 217, 0.15)');
   });
 
-  it('honors option overrides', () => {
-    createAccuracyCircle(mapStub, latlng, 10, { color: 'red', weight: 3 });
+  it('honors option overrides', async () => {
+    await createAccuracyCircle(mapStub, latlng, 10, { color: 'red', weight: 3 });
     const opts = (vi.mocked(L.circle).mock.calls[0] as any[])[1];
     expect(opts.color).toBe('red');
     expect(opts.weight).toBe(3);
   });
 
-  it('adds the circle to the map', () => {
-    const circle = createAccuracyCircle(mapStub, latlng, 7) as any;
+  it('adds the circle to the map', async () => {
+    const circle = await createAccuracyCircle(mapStub, latlng, 7) as any;
     expect(circle.addTo).toHaveBeenCalledWith(mapStub);
   });
 
-  it('binds and opens a popup showing the accuracy in meters', () => {
-    const circle = createAccuracyCircle(mapStub, latlng, 7) as any;
+  it('binds and opens a popup showing the accuracy in meters', async () => {
+    const circle = await createAccuracyCircle(mapStub, latlng, 7) as any;
     expect(circle.bindPopup).toHaveBeenCalledTimes(1);
     const popupHtml = circle.bindPopup.mock.calls[0][0] as string;
     expect(popupHtml).toContain('7');

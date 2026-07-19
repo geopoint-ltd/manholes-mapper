@@ -19,10 +19,12 @@
   <meta name="apple-mobile-web-app-title" content="Manhole Mapper (ממפה שוחות)" />
   <link rel="apple-touch-icon" sizes="180x180" href="./app_icon.png?v=3" />
   <link rel="apple-touch-icon" sizes="192x192" href="./icon-192.png" />
-  <!-- Preconnect and load a modern sans‑serif font for improved typography -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <!-- Fonts are self-hosted (Inter variable latin subset + Material Icons) — no
+       render-blocking third-party CSS. Preloaded so text/icons paint styled on
+       first frame instead of shifting when the fonts arrive. -->
+  <link rel="preload" href="./fonts/inter-latin-var.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="./fonts/material-icons.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="./geopoint_logo.png" as="image" />
   <link rel="manifest" href="./manifest.json" />
   <link rel="icon" type="image/png" href="./app_icon.png?v=3" />
   <!-- CSS is imported via JS in src/main-entry.js for Vite dev/build compatibility -->
@@ -30,7 +32,7 @@
   <!-- Styles moved to styles.css -->
 </head>
 
-<body>
+<body class="unified-layout">
   <!-- Skip link for keyboard navigation -->
   <a href="#main" class="skip-link" data-i18n="a11y.skipToContent">Skip to main content</a>
   
@@ -42,7 +44,7 @@
   <header class="soft-blue-header app-header">
     <!-- Brand section -->
     <div id="brand" class="menu-brand">
-      <img id="brandLogo" class="menu-brand__logo" src="./geopoint_logo.png" alt="Geopoint" />
+      <img id="brandLogo" class="menu-brand__logo" src="./geopoint_logo.png" alt="Geopoint" width="257" height="119" />
       <h1 id="appTitle" class="menu-brand__title">
         <span class="menu-brand__title-main">Manhole</span>
         <span class="menu-brand__title-highlight">Mapper</span>
@@ -334,7 +336,7 @@
   <div id="loginPanel" class="login-panel" style="display: none;" role="dialog" aria-modal="true" aria-label="Authentication">
     <div class="login-panel-content">
       <div class="login-panel-header">
-        <img src="./geopoint_logo.png" alt="Geopoint" class="login-logo" />
+        <img src="./geopoint_logo.png" alt="Geopoint" class="login-logo" width="257" height="119" />
         <h2 id="loginTitle" data-i18n="appTitle">Manhole Mapper</h2>
         <p id="loginSubtitle" class="login-subtitle" data-i18n="auth.loginSubtitle">התחבר כדי לגשת לשרטוטים שלך</p>
       </div>
