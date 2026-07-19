@@ -27,7 +27,9 @@
 // v138: get-session preload in index.html, login-form CLS reserve in styles.css,
 // immutable cache headers for /assets + /fonts.
 // v139: home search bar showed raw i18n keys (home.* → homeSearch.* in home-renderer).
-const APP_VERSION = 'v139';
+// v140: get-session preload credentials mode fixed (same-origin) so the browser
+// actually reuses it instead of double-fetching.
+const APP_VERSION = 'v140';
 const PRECACHE = 'graph-sketch-shell-' + APP_VERSION;
 const RUNTIME = 'graph-sketch-runtime-' + APP_VERSION;
 
