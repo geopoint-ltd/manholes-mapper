@@ -26,7 +26,8 @@
 // controllerchange reload made every fresh visit boot twice).
 // v138: get-session preload in index.html, login-form CLS reserve in styles.css,
 // immutable cache headers for /assets + /fonts.
-const APP_VERSION = 'v138';
+// v139: home search bar showed raw i18n keys (home.* → homeSearch.* in home-renderer).
+const APP_VERSION = 'v139';
 const PRECACHE = 'graph-sketch-shell-' + APP_VERSION;
 const RUNTIME = 'graph-sketch-runtime-' + APP_VERSION;
 

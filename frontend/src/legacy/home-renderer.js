@@ -158,7 +158,7 @@ export function renderSearchBar() {
     searchBar.className = 'home-search-bar';
     searchBar.innerHTML = `
       <span class="home-search-bar__icon material-icons">search</span>
-      <input type="search" class="home-search-bar__input" placeholder="${t('home.searchPlaceholder')}" autocomplete="off" />`;
+      <input type="search" class="home-search-bar__input" placeholder="${t('homeSearch.searchPlaceholder')}" autocomplete="off" />`;
     // Insert after sketch tabs or mode tabs
     const sketchTabs = document.getElementById('sketchTabs');
     const modeTabs = S.homePanel?.querySelector('.home-mode-tabs');
@@ -182,7 +182,7 @@ export function renderSearchBar() {
   // Update placeholder based on mode
   const input = searchBar.querySelector('.home-search-bar__input');
   if (input) {
-    input.placeholder = t('home.searchPlaceholder');
+    input.placeholder = t('homeSearch.searchPlaceholder');
     // Preserve the query in the input
     if (homeSearchQuery && input.value !== homeSearchQuery) {
       input.value = homeSearchQuery;
@@ -339,7 +339,7 @@ export function renderHome() {
     const empty = document.createElement('div');
     empty.className = 'sketch-list-empty';
     const emptyIcon = homeSearchQuery ? 'search_off' : 'inbox';
-    const emptyText = homeSearchQuery ? t('home.noSearchResults') : (currentSketchTab === 'organization' ? t('noOrganizationSketches') || 'No organization sketches' : t('noSketches'));
+    const emptyText = homeSearchQuery ? t('homeSearch.noSearchResults') : (currentSketchTab === 'organization' ? t('noOrganizationSketches') || 'No organization sketches' : t('noSketches'));
     empty.innerHTML = `
       <span class="material-icons">${emptyIcon}</span>
       <span>${emptyText}</span>
@@ -586,7 +586,7 @@ export async function renderProjectsHome() {
       S.sketchListEl.innerHTML = `
         <div class="sketch-list-empty">
           <span class="material-icons">search_off</span>
-          <span>${t('home.noSearchResults')}</span>
+          <span>${t('homeSearch.noSearchResults')}</span>
         </div>`;
       return;
     }
