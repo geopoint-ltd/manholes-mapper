@@ -364,7 +364,7 @@ This project is deployed on **Vercel** with automatic deployments from Git.
 
 #### Deployment Process
 
-1. **Automatic Deployments**: `dev` is the production branch (Vercel team `gis-6579s-projects`) — every push to `dev` triggers a production deployment; other branches build previews. (`master` is dormant. The pre-2026-07 URL https://manholes-mapper.vercel.app serves a stale build against the old database.)
+1. **Automatic Deployments**: `dev` is the production branch (Vercel team `gis-6579s-projects`) — every push to `dev` triggers a production deployment; other branches build previews. (`master` mirrors `dev` — synced manually, last on 2026-07-19; its pushes only build previews. The pre-2026-07 URL https://manholes-mapper.vercel.app serves a stale build against the old database.)
 2. **Manual Deployment**: Use Vercel CLI or dashboard to trigger deployments.
 
 ```bash
