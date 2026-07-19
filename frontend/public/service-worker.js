@@ -22,7 +22,9 @@
 // v136: perf pass — self-hosted Inter (Google Fonts CSS removed from index.html),
 // font/logo preloads, unified-layout class baked into HTML, lazy React/Leaflet/
 // survey chunks (new chunk graph).
-const APP_VERSION = 'v136';
+// v137: register-sw no longer reloads the page on first SW install (the
+// controllerchange reload made every fresh visit boot twice).
+const APP_VERSION = 'v137';
 const PRECACHE = 'graph-sketch-shell-' + APP_VERSION;
 const RUNTIME = 'graph-sketch-runtime-' + APP_VERSION;
 

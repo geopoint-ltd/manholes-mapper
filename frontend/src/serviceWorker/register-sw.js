@@ -106,8 +106,15 @@
       console.error('[SW] Service worker registration failed:', err.message);
     });
 
+  // On a FIRST install the page loaded with no controller; the SW's
+  // clients.claim() then fires controllerchange, but nothing needs reloading —
+  // every asset already arrived from the network. Reloading here made every
+  // brand-new visit boot the app twice (~2x LCP). Only reload on a real
+  // controller takeover, i.e. when an old SW was replaced by a new one.
+  const hadControllerAtLoad = !!navigator.serviceWorker.controller;
   let reloaded = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadControllerAtLoad) return;
     if (reloaded) return;
     reloaded = true;
     // Show a brief "App updated" toast before reloading so the user
