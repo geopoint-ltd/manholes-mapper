@@ -13,6 +13,7 @@ import { S, F } from './shared-state.js';
 import { distanceToSegment } from '../utils/geometry.js';
 import { NODE_RADIUS } from '../state/constants.js';
 import { commitIdInputIfFocused } from '../dom/dom-utils.js';
+import { openFieldStepper } from '../field-stepper/field-stepper.js';
 import { wizardIsRTKFixed } from './wizard-helpers.js';
 
 // ── Local constants ─────────────────────────────────────────────────────────
@@ -459,23 +460,27 @@ function pointerDown(x, y) {
   if (S.currentMode === 'node') {
     const created = F.createNode(world.x, world.y);
     if (!created) return; // read-only sketch
+    // Close the create-edit gap: manual placement used to leave the node
+    // unselected with no panel open, forcing a second tap to fill it in.
+    S.selectedNode = created;
+    S.selectedEdge = null;
     F.scheduleDraw();
+    openFieldStepper(created);
   } else if (S.currentMode === 'home') {
     const created = F.createNode(world.x, world.y);
     if (!created) return; // read-only sketch
     created.nodeType = 'Home';
     S.selectedNode = created;
     F.draw();
-    F.renderDetails();
-    setTimeout(() => {
-      const firstInput = S.detailsContainer.querySelector('input:not([type="checkbox"]), select, textarea');
-      if (firstInput) firstInput.focus();
-    }, 0);
+    openFieldStepper(created);
   } else if (S.currentMode === 'drainage') {
     const created = F.createNode(world.x, world.y);
     if (!created) return; // read-only sketch
     created.nodeType = 'Drainage';
+    S.selectedNode = created;
+    S.selectedEdge = null;
     F.scheduleDraw();
+    openFieldStepper(created);
   } else if (S.currentMode === 'issue') {
     const created = F.createNode(world.x, world.y);
     if (!created) return; // read-only sketch
@@ -1176,6 +1181,16 @@ export function initPointerHandlers() {
                 const firstInput = S.detailsContainer.querySelector('textarea, input:not([type="checkbox"])');
                 if (firstInput) firstInput.focus();
               }, 0);
+            }
+            // Touch creation has its own path separate from pointerDown (touchstart
+            // preventDefault suppresses synthesized mouse events, so pointerDown's
+            // node/home/drainage stepper wiring is unreachable from touch). Mirror it
+            // here so the TSC5 touchscreen — the primary field device — also opens
+            // the stepper instead of leaving the create-edit gap.
+            if (created && S.currentMode !== 'issue') {
+              S.selectedNode = created;
+              S.selectedEdge = null;
+              openFieldStepper(created);
             }
             F.scheduleDraw();
           }

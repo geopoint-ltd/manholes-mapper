@@ -31,7 +31,10 @@
 // actually reuses it instead of double-fetching.
 // v141: preload comment corrected — Chrome never matches it to better-auth's
 // wrapped fetch; kept as a serverless warmer (~330ms → ~185ms session calls).
-const APP_VERSION = 'v141';
+// v142: field-stepper UI committed (was working-tree-only since 2026-07-15):
+// stepper module + create-edit-gap fix in pointer handlers + TSC3 non-hijack
+// notify + stepper i18n keys.
+const APP_VERSION = 'v142';
 const PRECACHE = 'graph-sketch-shell-' + APP_VERSION;
 const RUNTIME = 'graph-sketch-runtime-' + APP_VERSION;
 

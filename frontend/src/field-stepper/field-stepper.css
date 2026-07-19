@@ -1,0 +1,502 @@
+/*
+ * field-stepper.css — full-screen one-field-per-screen data entry overlay.
+ *
+ * z-index: 1100. Measured (not the stale top-of-file legend in styles.css)
+ * stacking order is: canvas/toolbar (auto/0) < field-stepper (1100) <
+ * floating-keyboard (1500, styles.css:7301) < canvas-context-menu (1600,
+ * styles.css:1398) < snackbar container (1700, ui/snackbar.css) < survey
+ * dialogs (10000). 1100 sits above the canvas + toolbar + drawers, but
+ * below the floating numeric keyboard so the depths screen's decimal
+ * inputs still show their keyboard above the stepper, and below every
+ * toast/snackbar/context-menu so alerts are never hidden behind it.
+ *
+ * All colors are CSS custom properties from styles.css/design-system-v2.css
+ * (dark mode + light mode both flow through [data-theme] / prefers-color-scheme
+ * automatically — no separate dark rules needed here).
+ */
+
+.field-stepper-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  flex-direction: column;
+  background: var(--color-bg, #f8fafc);
+  color: var(--color-text, #0f172a);
+}
+
+.field-stepper-overlay.open {
+  display: flex;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────── */
+.field-stepper-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  flex: 0 0 auto;
+  min-height: 48px;
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  background: var(--color-surface, #ffffff);
+  border-bottom: 1px solid var(--color-border, #e5e7eb);
+}
+
+.field-stepper-header-main {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1, 4px);
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.field-stepper-type-icon {
+  font-size: 20px;
+  color: var(--color-primary, #2563eb);
+  flex: 0 0 auto;
+}
+
+.field-stepper-type-label {
+  font-size: var(--text-sm, 0.875rem);
+  font-weight: var(--font-semibold, 600);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.field-stepper-id {
+  font-size: var(--text-sm, 0.875rem);
+  font-weight: var(--font-semibold, 600);
+  color: var(--color-primary, #2563eb);
+  margin-inline-start: var(--space-1, 4px);
+  white-space: nowrap;
+}
+
+.field-stepper-progress {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 1 auto;
+  overflow: hidden;
+}
+
+.field-stepper-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-border-strong, #d1d5db);
+  flex: 0 0 auto;
+}
+
+.field-stepper-dot--filled {
+  background: var(--color-success, #22c55e);
+}
+
+.field-stepper-dot--current {
+  width: 10px;
+  height: 10px;
+  box-shadow: 0 0 0 2px var(--color-primary-light, #dbeafe);
+  background: var(--color-primary, #2563eb);
+}
+
+.field-stepper-dot--stage {
+  border-radius: 3px;
+}
+
+.field-stepper-close {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary, #475569);
+  border-radius: var(--radius, 8px);
+  cursor: pointer;
+}
+
+.field-stepper-close:hover,
+.field-stepper-close:focus-visible {
+  background: var(--color-surface-hover, #f1f5f9);
+  color: var(--color-text, #0f172a);
+}
+
+/* ── Current value line ─────────────────────────────────────────────── */
+.field-stepper-current-value {
+  flex: 0 0 auto;
+  padding: 6px var(--space-3, 12px);
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--color-text-secondary, #475569);
+  background: var(--color-surface-hover, #f1f5f9);
+  border-bottom: 1px solid var(--color-border, #e5e7eb);
+}
+
+.field-stepper-current-value-label {
+  font-weight: var(--font-medium, 500);
+}
+
+.field-stepper-current-value-val {
+  color: var(--color-text, #0f172a);
+  font-weight: var(--font-semibold, 600);
+}
+
+.field-stepper-current-value-empty {
+  font-style: italic;
+}
+
+/* ── Body ───────────────────────────────────────────────────────────── */
+.field-stepper-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: var(--space-3, 12px);
+  -webkit-overflow-scrolling: touch;
+}
+
+.field-stepper-field-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  font-size: var(--text-base, 1rem);
+  font-weight: var(--font-semibold, 600);
+  margin-bottom: var(--space-3, 12px);
+  color: var(--color-text, #0f172a);
+}
+
+.field-stepper-field-header .material-icons {
+  font-size: 22px;
+  color: var(--color-primary, #2563eb);
+}
+
+.field-stepper-explainer {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2, 8px);
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  margin-bottom: var(--space-3, 12px);
+  background: var(--color-warning-light, #fef3c7);
+  color: var(--color-warning-hover, #d97706);
+  border-radius: var(--radius, 8px);
+  font-size: var(--text-sm, 0.875rem);
+  line-height: var(--leading-normal, 1.5);
+}
+
+.field-stepper-explainer .material-icons {
+  font-size: 18px;
+  flex: 0 0 auto;
+}
+
+.field-stepper-empty {
+  padding: var(--space-4, 16px);
+  text-align: center;
+  color: var(--color-text-secondary, #475569);
+  font-size: var(--text-sm, 0.875rem);
+}
+
+/* ── Chip grid ──────────────────────────────────────────────────────── */
+.field-stepper-chip-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: var(--space-2, 8px);
+}
+
+.field-stepper-chip {
+  min-height: 52px;
+  min-width: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  font-size: var(--text-sm, 0.875rem);
+  font-weight: var(--font-medium, 500);
+  color: var(--color-text, #0f172a);
+  background: var(--color-surface, #ffffff);
+  border: 2px solid var(--color-border, #e5e7eb);
+  border-radius: var(--radius-md, 10px);
+  cursor: pointer;
+  line-height: var(--leading-tight, 1.25);
+}
+
+.field-stepper-chip:hover,
+.field-stepper-chip:focus-visible {
+  border-color: var(--color-primary, #2563eb);
+  background: var(--color-surface-hover, #f1f5f9);
+}
+
+.field-stepper-chip:active {
+  background: var(--color-primary-light, #dbeafe);
+}
+
+.field-stepper-chip--selected {
+  border-color: var(--color-primary, #2563eb);
+  background: var(--color-primary-light, #dbeafe);
+  color: var(--color-primary, #2563eb);
+  font-weight: var(--font-semibold, 600);
+}
+
+.field-stepper-chip-grid--compact .field-stepper-chip,
+.field-stepper-chip--compact {
+  min-height: 44px;
+  font-size: var(--text-xs, 0.75rem);
+  padding: 6px var(--space-2, 8px);
+}
+
+/* ── Note textarea screen ──────────────────────────────────────────── */
+.field-stepper-textarea {
+  width: 100%;
+  min-height: 140px;
+  box-sizing: border-box;
+  padding: var(--space-3, 12px);
+  font-size: 16px; /* >=16px avoids iOS zoom-on-focus; also clears the 12px floor */
+  font-family: inherit;
+  color: var(--color-text, #0f172a);
+  background: var(--color-surface, #ffffff);
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: var(--radius, 8px);
+  resize: vertical;
+}
+
+.field-stepper-textarea:focus {
+  outline: none;
+  border-color: var(--color-primary, #2563eb);
+  box-shadow: var(--focus-ring, 0 0 0 3px rgba(37, 99, 235, 0.3));
+}
+
+/* ── Depths screen ──────────────────────────────────────────────────── */
+.field-stepper-edge-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 12px);
+}
+
+.field-stepper-edge-card {
+  padding: var(--space-3, 12px);
+  background: var(--color-surface, #ffffff);
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: var(--radius, 8px);
+}
+
+.field-stepper-edge-header {
+  font-size: var(--text-sm, 0.875rem);
+  font-weight: var(--font-semibold, 600);
+  margin-bottom: var(--space-2, 8px);
+  color: var(--color-text, #0f172a);
+}
+
+.field-stepper-depth-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3, 12px);
+}
+
+.field-stepper-depth-field label {
+  display: block;
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--color-text-secondary, #475569);
+  margin-bottom: 4px;
+}
+
+.field-stepper-depth-input {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: var(--touch-target-min, 44px);
+  padding: 0 var(--space-2, 8px);
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--color-text, #0f172a);
+  background: var(--color-surface, #ffffff);
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: var(--radius, 8px);
+}
+
+.field-stepper-depth-input:focus {
+  outline: none;
+  border-color: var(--color-primary, #2563eb);
+  box-shadow: var(--focus-ring, 0 0 0 3px rgba(37, 99, 235, 0.3));
+}
+
+.field-stepper-depth-warning {
+  min-height: 14px;
+  margin-top: 2px;
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--color-danger, #ef4444);
+}
+
+.field-stepper-edge-expander {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: var(--space-2, 8px);
+  padding: 6px var(--space-2, 8px);
+  min-height: var(--touch-target-min, 44px);
+  background: transparent;
+  border: none;
+  color: var(--color-primary, #2563eb);
+  font-size: var(--text-xs, 0.75rem);
+  cursor: pointer;
+}
+
+.field-stepper-edge-expander .material-icons {
+  font-size: 16px;
+}
+
+.field-stepper-edge-details {
+  margin-top: var(--space-2, 8px);
+  padding-top: var(--space-2, 8px);
+  border-top: 1px dashed var(--color-border, #e5e7eb);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 8px);
+}
+
+.field-stepper-edge-detail-label {
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--color-text-secondary, #475569);
+  margin-bottom: 4px;
+}
+
+/* ── Completion screen ──────────────────────────────────────────────── */
+.field-stepper-completion {
+  text-align: center;
+  padding: var(--space-4, 16px) var(--space-2, 8px);
+}
+
+.field-stepper-completion-title {
+  font-size: var(--text-base, 1rem);
+  font-weight: var(--font-semibold, 600);
+  margin-bottom: var(--space-2, 8px);
+}
+
+.field-stepper-completion-icon {
+  font-size: 40px;
+  color: var(--color-success, #22c55e);
+}
+
+.field-stepper-completion-percent {
+  font-size: var(--text-2xl, 1.5rem);
+  font-weight: var(--font-bold, 700);
+  margin: 4px 0;
+}
+
+.field-stepper-completion-summary {
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--color-text-secondary, #475569);
+}
+
+.field-stepper-completion-skipped {
+  margin-top: 4px;
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--color-warning-hover, #d97706);
+}
+
+.field-stepper-completion-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 8px);
+  margin-top: var(--space-4, 16px);
+}
+
+/* ── Nav footer ─────────────────────────────────────────────────────── */
+.field-stepper-nav {
+  display: flex;
+  flex: 0 0 auto;
+  gap: var(--space-2, 8px);
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  padding-bottom: max(var(--space-2, 8px), env(safe-area-inset-bottom, 0px));
+  background: var(--color-surface, #ffffff);
+  border-top: 1px solid var(--color-border, #e5e7eb);
+}
+
+.field-stepper-nav-btn {
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 52px;
+  min-width: 44px;
+  font-size: var(--text-sm, 0.875rem);
+  font-weight: var(--font-medium, 500);
+  color: var(--color-text, #0f172a);
+  background: var(--color-surface-hover, #f1f5f9);
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: var(--radius, 8px);
+  cursor: pointer;
+}
+
+.field-stepper-nav-btn .material-icons {
+  font-size: 18px;
+}
+
+.field-stepper-nav-btn:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.field-stepper-nav-btn--forward {
+  background: var(--color-primary, #2563eb);
+  border-color: var(--color-primary, #2563eb);
+  color: var(--color-text-on-primary, #ffffff);
+}
+
+.field-stepper-nav-btn--primary {
+  background: var(--color-success, #22c55e);
+  border-color: var(--color-success, #22c55e);
+  color: var(--color-text-on-primary, #ffffff);
+  min-height: 56px;
+  font-size: var(--text-base, 1rem);
+  font-weight: var(--font-semibold, 600);
+}
+
+.field-stepper-nav-btn--secondary {
+  min-height: 48px;
+}
+
+/* ── TSC5 landscape compaction (640x360) ────────────────────────────── */
+@media (max-height: 450px) and (orientation: landscape) {
+  .field-stepper-header {
+    min-height: 40px;
+    padding: 4px var(--space-2, 8px);
+  }
+
+  .field-stepper-current-value {
+    padding: 4px var(--space-2, 8px);
+  }
+
+  .field-stepper-body {
+    padding: var(--space-2, 8px);
+  }
+
+  .field-stepper-field-header {
+    margin-bottom: var(--space-2, 8px);
+    font-size: var(--text-sm, 0.875rem);
+  }
+
+  .field-stepper-chip {
+    min-height: 44px;
+    padding: 6px var(--space-2, 8px);
+  }
+
+  .field-stepper-chip-grid {
+    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+    gap: 6px;
+  }
+
+  .field-stepper-textarea {
+    min-height: 90px;
+  }
+
+  .field-stepper-nav-btn {
+    min-height: 44px;
+  }
+
+  .field-stepper-nav-btn--primary {
+    min-height: 48px;
+  }
+
+  .field-stepper-completion-buttons {
+    flex-direction: row;
+  }
+}

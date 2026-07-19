@@ -19,6 +19,7 @@ import { initSketchSidePanel } from '../project/sketch-side-panel.js';
 import { menuEvents } from '../menu/menu-events.js';
 import { saveCoordinatesToStorage } from '../utils/coordinates.js';
 import { STORAGE_KEYS } from '../state/persistence.js';
+import { notifyStepperOfExternalNodeUpdate } from '../field-stepper/field-stepper.js';
 
 // Convenience wrappers
 const t = (...args) => F.t(...args);
@@ -107,6 +108,12 @@ export function handleTSC3PointReceived(pointName, coords, isNew, nodeType) {
   F.computeNodeTypes();
   F.saveToStorage();
   F.scheduleDraw();
+
+  // Field stepper: never hijack a worker mid-entry on a different node.
+  // Opens fresh if closed, does a targeted header/value-only refresh if this
+  // same node is already open in the stepper, or queues a non-focus-stealing
+  // switch-to snackbar if a different node is open.
+  notifyStepperOfExternalNodeUpdate(node, pointName);
 
   // Auto zoom/recenter after new survey points
   if (isNew) {
