@@ -25,11 +25,12 @@
   <link rel="preload" href="./fonts/inter-latin-var.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="./fonts/material-icons.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="./geopoint_logo.png" as="image" />
-  <!-- Start the auth session check in parallel with JS parse/execute — every
+  <!-- Warm the auth session endpoint in parallel with JS parse/execute — every
        boot path (login panel or canvas) waits on this round-trip otherwise.
-       No crossorigin attr: better-auth fetches with default credentials
-       ('same-origin'), and the preload's request mode must match exactly or
-       the browser refuses to reuse it (verified via Lighthouse waterfall). -->
+       Chrome does NOT reuse this preload for better-auth's own wrapped fetch
+       (request-property mismatch, verified via Lighthouse waterfall), but the
+       early hit warms the serverless function + TLS: the real session calls
+       drop from ~330ms to ~185ms. Don't expect single-request behavior. -->
   <link rel="preload" href="/api/auth/get-session" as="fetch" />
   <link rel="manifest" href="./manifest.json" />
   <link rel="icon" type="image/png" href="./app_icon.png?v=3" />

@@ -29,7 +29,9 @@
 // v139: home search bar showed raw i18n keys (home.* → homeSearch.* in home-renderer).
 // v140: get-session preload credentials mode fixed (same-origin) so the browser
 // actually reuses it instead of double-fetching.
-const APP_VERSION = 'v140';
+// v141: preload comment corrected — Chrome never matches it to better-auth's
+// wrapped fetch; kept as a serverless warmer (~330ms → ~185ms session calls).
+const APP_VERSION = 'v141';
 const PRECACHE = 'graph-sketch-shell-' + APP_VERSION;
 const RUNTIME = 'graph-sketch-runtime-' + APP_VERSION;
 
