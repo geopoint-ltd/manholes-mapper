@@ -171,7 +171,7 @@ import { fetchProjects, renderProjectDropdown, getProjectInputFlowConfig, syncFl
 // Utility functions and canvas helpers — [Extracted to src/legacy/app-utils.js]
 import { getCurrentUsername, updateNodeTimestamp, updateEdgeTimestamp, synthesizeClickOnTap, updateSketchNameDisplay, getCachedCanvasRect, invalidateCanvasRectCache, markEdgeLabelCacheDirty, resizeCanvas, scheduleResizeCanvas, saveAdminConfig, defaultAdminConfig, loadAdminConfig, normalizeAdminConfig } from './app-utils.js';
 // Graph CRUD — [Extracted to src/legacy/graph-crud.js]
-import { newSketch, createNode, createEdge, createDanglingEdge, createInboundDanglingEdge, findIncompleteEdges, markRequiredFields, isNodeIncomplete, findNextIncompleteNode, centerOnNode } from './graph-crud.js';
+import { newSketch, createNode, createEdge, reverseEdge, createDanglingEdge, createInboundDanglingEdge, findIncompleteEdges, markRequiredFields, isNodeIncomplete, findNextIncompleteNode, centerOnNode } from './graph-crud.js';
 // Wizard helpers — [Extracted to src/legacy/wizard-helpers.js]
 import { wizardIsRTKFixed, wizardGetVisibleTabs, wizardIsFieldFilled, buildWizardTabsHTML, buildWizardFieldHTML, WIZARD_TAB_DEFS } from './wizard-helpers.js';
 
@@ -1804,6 +1804,7 @@ F.renderRefLayerToggles   = (...a) => renderRefLayerToggles(...a);
 F.hitTestReferenceLayers  = (...a) => hitTestReferenceLayers(...a);
 F.createNode              = (...a) => createNode(...a);
 F.createEdge              = (...a) => createEdge(...a);
+F.reverseEdge             = (...a) => reverseEdge(...a);
 F.computeNodeTypes        = (...a) => computeNodeTypes(...a);
 F.syncCoordinatesToggleUI = (...a) => syncCoordinatesToggleUI(...a);
 F.saveCoordinatesEnabled  = (...a) => saveCoordinatesEnabled(...a);

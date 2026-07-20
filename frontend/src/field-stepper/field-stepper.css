@@ -499,4 +499,104 @@
   .field-stepper-completion-buttons {
     flex-direction: row;
   }
+
+  /* CONNECT cards: 3 cards + explainer must fit the ~268px body budget —
+     44px keeps the touch-target floor while dropping ~40px vs the default. */
+  .field-stepper-connect-list {
+    gap: 6px;
+    padding: 2px var(--space-2, 8px) 8px;
+  }
+
+  .field-stepper-connect-card {
+    min-height: 44px;
+    padding: 6px 12px;
+    font-size: 14px;
+  }
+
+  .field-stepper-connect-meta {
+    font-size: 12px;
+  }
+}
+
+/* ── CONNECT screen (flow-direction decision, spec §B3/B4b) ─────────────── */
+.field-stepper-connect-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 16px 12px;
+}
+
+.field-stepper-connect-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 52px;
+  padding: 10px 14px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text, #0f172a);
+  background: var(--color-surface, #ffffff);
+  border: 2px solid var(--color-border, #e5e7eb);
+  border-radius: 12px;
+  cursor: pointer;
+  text-align: start;
+}
+
+.field-stepper-connect-card:active {
+  background: var(--color-surface-hover, #f1f5f9);
+}
+
+.field-stepper-connect-card--recommended {
+  border-color: var(--color-primary, #2563eb);
+  background: var(--color-primary-light, #dbeafe);
+}
+
+.field-stepper-connect-card--none {
+  font-weight: 500;
+  color: var(--color-text-secondary, #475569);
+}
+
+.field-stepper-connect-dir {
+  font-variant-numeric: tabular-nums;
+}
+
+.field-stepper-connect-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.field-stepper-connect-badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--color-primary, #2563eb);
+  color: #ffffff;
+  font-size: 12px;
+}
+
+.field-stepper-connect-badge--warn {
+  background: var(--color-warning-light, #fef3c7);
+  color: var(--color-warning-hover, #d97706);
+}
+
+.field-stepper-connect-slope--ok {
+  color: var(--color-success, #22c55e);
+}
+
+.field-stepper-connect-slope--up {
+  color: var(--color-danger, #dc2626);
+}
+
+.field-stepper-connect-question {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.field-stepper-connect-reason {
+  font-size: 13px;
+  font-weight: 400;
 }

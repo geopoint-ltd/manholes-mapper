@@ -202,7 +202,10 @@ function handleGnssPointCapture(captureData) {
       head: targetNodeId,
       edge_type: captureData.edgeType || EDGE_TYPES[0],
       material: 0,
-      line_diameter: null
+      line_diameter: null,
+      // Capture-order guess, not a decision — depth data may flip it later
+      // (GNSS path gets the full Z-aware tier logic in wizard phase 4).
+      direction_source: 'chronological'
     };
     S.edges.push(newEdge);
     window.__gradientEngine?.onEdgeCreated(newEdge);
@@ -337,7 +340,9 @@ function createNodeFromMeasurement(result) {
   if (lastId != null) {
     const prevNode = S.nodes.find(n => String(n.id) === String(lastId));
     if (prevNode) {
-      F.createEdge(String(lastId), String(node.id));
+      // Chronological chain guess — must not be recorded as a deliberate
+      // 'user' direction (the Z-aware tier logic reaches GNSS in phase 4).
+      F.createEdge(String(lastId), String(node.id), { directionSource: 'chronological' });
     }
   }
 

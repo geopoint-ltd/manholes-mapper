@@ -414,6 +414,22 @@ export function performUndo() {
     F.scheduleDraw();
     F.showToast(t('toasts.undoEdgeCreate'));
 
+  } else if (action.type === 'edgeReverse') {
+    // Undo a flow-direction flip: swap back and restore the old provenance
+    const edge = S.edges.find(e => String(e.id) === String(action.edgeId));
+    if (!edge) { S.undoStack.pop(); updateUndoButton(); return; }
+    [edge.tail, edge.head] = [edge.head, edge.tail];
+    [edge.tail_measurement, edge.head_measurement] = [edge.head_measurement, edge.tail_measurement];
+    edge.direction_source = action.prevDirectionSource;
+    S.undoStack.pop();
+    S.redoStack.push(deepCopyObj(action));
+    F.computeNodeTypes();
+    F.markEdgeLabelCacheDirty();
+    F.saveToStorage();
+    window.__gradientEngine?.evaluateEdge(edge);
+    F.scheduleDraw();
+    F.showToast(t('toasts.undoEdgeReverse'));
+
   } else {
     // Unknown action type — just remove it
     S.undoStack.pop();
@@ -562,6 +578,21 @@ export function performRedo() {
     F.markEdgeLabelCacheDirty();
     F.saveToStorage();
     F.scheduleDraw();
+
+  } else if (action.type === 'edgeReverse') {
+    // Redo a flow-direction flip: swap again and reinstate the new provenance
+    const edge = S.edges.find(e => String(e.id) === String(action.edgeId));
+    if (!edge) { updateRedoButton(); return; }
+    [edge.tail, edge.head] = [edge.head, edge.tail];
+    [edge.tail_measurement, edge.head_measurement] = [edge.head_measurement, edge.tail_measurement];
+    edge.direction_source = action.newDirectionSource;
+    pushUndoDirect(deepCopyObj(action));
+    F.computeNodeTypes();
+    F.markEdgeLabelCacheDirty();
+    F.saveToStorage();
+    window.__gradientEngine?.evaluateEdge(edge);
+    F.scheduleDraw();
+    F.showToast(t('toasts.redoEdgeReverse'));
 
   } else if (action.type === 'danglingMerge') {
     // Redo merge: re-apply merge (edgeA already exists, delete edgeB again, restore merged state)

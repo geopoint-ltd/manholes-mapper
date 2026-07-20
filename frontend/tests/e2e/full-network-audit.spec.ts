@@ -6,16 +6,21 @@
  *   - UX findings + timings (test-results/full-network-audit-findings.json)
  *     that feed the easibility-score report.
  *
- * Network built (flow = edge direction tail→head, elevations in meters):
+ * Network built (flow = edge direction tail→head, elevations in meters).
+ * Shots arrive in chain order 101→102→103→104→105, but auto-connect is
+ * Z-aware (connection-suggest, spec docs/SMART_MEASUREMENT_WIZARD.md §B2):
+ * every edge is created higher-Z → lower-Z, so the DELIBERATE uphill shot
+ * MH-104 (104.55, shot right after MH-103 at 104.10) must come out FLIPPED:
  *
- *   MH-101(105.00) → MH-102(104.60) → MH-103(104.10) → MH-104(104.55!) → MH-105(103.80)
+ *   MH-101(105.00) → MH-102(104.60) → MH-103(104.10) ← MH-104(104.55) → MH-105(103.80)
  *                                        └→ BR-201(103.60) → BR-202(103.10)
- *                                                             MH-105 → HM-301(104.00, Home)
+ *                                                             HM-301(104.00, Home) → MH-105
  *
- *   MH-103 → MH-104 is a DELIBERATE negative gradient (terrain rises 0.45m
- *   along flow). The smart layer must call it out the moment MH-104's
- *   measurement lands. MH-105 → HM-301 also "rises" but touches a Home node —
- *   gradient checks must NOT fire there (false-positive guard).
+ *   Because the direction is Z-corrected at creation time, NO terrain
+ *   gradient alert may fire for MH-104 — the app fixed the arrow instead of
+ *   warning about it. The invert-basis alert path is exercised in Phase 6 by
+ *   entering depths that make the invert RISE along the corrected direction.
+ *   HM-301 is a Home lateral: locked Home→main, gradient-exempt.
  *
  * Modes:
  *   baseline            — records observations only (no smart-layer asserts)
@@ -159,6 +164,21 @@ async function feedbackState(page: Page) {
   });
 }
 
+/**
+ * The field stepper opens fullscreen on the first TSC3 shot (and stays open —
+ * later shots queue a switch-to snackbar instead of hijacking). Canvas taps
+ * land on the overlay while it's up, so phases that tap nodes close it first.
+ */
+async function closeStepperIfOpen(page: Page) {
+  await page.evaluate(() => {
+    const overlay = document.getElementById('fieldStepperOverlay');
+    if (overlay?.classList.contains('open')) {
+      (overlay.querySelector('.field-stepper-close') as HTMLElement | null)?.click();
+    }
+  });
+  await page.waitForTimeout(200);
+}
+
 interface ShotResult { dialogLatencyMs: number | null; appliedMs: number; taps: number }
 
 /**
@@ -279,26 +299,31 @@ test('full network build via TSC3 emulator: UX audit + gradient intelligence', a
     }
     if (p.pointName === 'MH-104') {
       const fb = await feedbackState(page);
-      record('feedback.atNegativeGradientMoment', fb);
-      await page.screenshot({ path: `${OUT_DIR}/audit-negative-gradient-moment.png` });
+      record('feedback.atUphillShotMoment', fb);
+      await page.screenshot({ path: `${OUT_DIR}/audit-uphill-shot-moment.png` });
+      const flipped = (await sketch(page)).edges.some((e) => e.tail === 'MH-104' && e.head === 'MH-103');
+      record('uphillShotFlipped', flipped);
       if (EXPECT_SMART) {
+        // The uphill shot must be FIXED at creation (edge created MH-104→MH-103),
+        // not warned about: no terrain gradient alert, no gradient snackbar.
+        expect(flipped, 'auto-connect created the uphill edge Z-corrected (MH-104→MH-103)').toBe(true);
         expect(fb.engineAlerts, 'gradient engine present and exposing alerts').not.toBeNull();
         expect(
           fb.engineAlerts!.some((a: any) => a.status === 'negative'),
-          'engine flagged the uphill segment the moment the measurement landed',
-        ).toBe(true);
+          'no gradient alert — the direction was corrected instead',
+        ).toBe(false);
         expect(
           fb.snackbars.some((s) => s.kind === 'gradient-negative'),
-          'user was notified immediately via snackbar',
-        ).toBe(true);
+          'no negative-gradient snackbar for a Z-corrected connection',
+        ).toBe(false);
       } else {
         const warned =
           fb.snackbars.some((s) => s.kind === 'gradient-negative') ||
           /שיפוע|gradient/i.test(fb.toastText);
-        record('baseline.negativeGradientWarned', warned);
-        if (!warned) {
+        record('baseline.uphillHandled', { flipped, warned });
+        if (!flipped && !warned) {
           note('smartness', 'major',
-            'MH-104 measured 0.45m ABOVE the upstream manhole along flow direction — app accepted it with no gradient warning at measurement time');
+            'MH-104 measured 0.45m ABOVE the upstream manhole along shot order — app neither corrected the direction nor warned at measurement time');
         }
       }
     }
@@ -317,10 +342,22 @@ test('full network build via TSC3 emulator: UX audit + gradient intelligence', a
   if (EXPECT_SMART) {
     expect(
       fbHome.engineAlerts!.filter((a: any) => a.status === 'negative'),
-      'home-connection uphill must NOT add a gradient alert (still exactly one, for MH-103→MH-104)',
-    ).toHaveLength(1);
+      'no gradient alerts anywhere: the uphill segment was Z-corrected and Home laterals are exempt',
+    ).toHaveLength(0);
   }
   record('shots', shots);
+
+  // The stepper stays open from the first shot (later arrivals queue) — close
+  // it so the network screenshot and Phase 6's canvas taps see the canvas.
+  await closeStepperIfOpen(page);
+
+  // A rapid shot session builds a snackbar QUEUE: dismissing the 3 visible
+  // ones just pops queued ones into their place, so mid-screen nodes stay
+  // buried on 640×360. Real field hazard — recorded, then bypassed (this spec
+  // audits depth entry, not toast layering).
+  note('feedback', 'major',
+    'Snackbar stack (max 3) + waiting queue keeps the canvas center covered for many seconds after a rapid shot session — node taps land on toasts, and dismissing only surfaces the next queued toast');
+  await page.addStyleTag({ content: '#snackbarContainer, #snackbarContainer * { pointer-events: none !important; }' });
 
   // ── Phase 5: network shape assertions ────────────────────────────────────
   const net = await sketch(page);
@@ -330,31 +367,39 @@ test('full network build via TSC3 emulator: UX audit + gradient intelligence', a
   });
   expect(net.nodes, 'all 8 surveyed points became nodes').toHaveLength(8);
   expect(net.edges, 'auto-connect chained all 7 pipes').toHaveLength(7);
+  // Z-aware directions: every arrow points downhill regardless of shot order
+  // (MH-104 flipped; HM-301 is the locked Home→main lateral).
   for (const [tail, head] of [
-    ['MH-101', 'MH-102'], ['MH-102', 'MH-103'], ['MH-103', 'MH-104'], ['MH-104', 'MH-105'],
-    ['MH-103', 'BR-201'], ['BR-201', 'BR-202'], ['MH-105', 'HM-301'],
+    ['MH-101', 'MH-102'], ['MH-102', 'MH-103'], ['MH-104', 'MH-103'], ['MH-104', 'MH-105'],
+    ['MH-103', 'BR-201'], ['BR-201', 'BR-202'], ['HM-301', 'MH-105'],
   ]) {
     expect(
       net.edges.some((e) => e.tail === tail && e.head === head),
-      `edge ${tail}->${head} exists with correct flow direction`,
+      `edge ${tail}->${head} exists with correct (Z-aware) flow direction`,
     ).toBe(true);
   }
+  expect(
+    net.edges.some((e) => e.tail === 'MH-103' && e.head === 'MH-104'),
+    'the blind chronological MH-103->MH-104 arrow must NOT exist',
+  ).toBe(false);
   await page.evaluate(() => (window as any).zoomToFit?.());
   await page.waitForTimeout(500);
   await page.screenshot({ path: `${OUT_DIR}/audit-full-network.png` });
 
   // ── Phase 6: depth measurements via the details panel ────────────────────
-  // Bad edge MH-103→MH-104: inverts 104.10-1.50=102.60 → 104.55-1.20=103.35 (RISES → negative)
+  // Bad edge MH-104→MH-103 (the Z-corrected arrow): depths chosen so the
+  // INVERT rises along flow even though terrain falls —
+  //   inverts 104.55-1.80=102.75 → 104.10-1.20=102.90 (RISES → negative, invert basis)
   // Good edge MH-101→MH-102: inverts 105.00-1.20=103.80 → 104.60-1.10=103.50 (falls → ok)
-  const badEdge = net.edges.find((e) => e.tail === 'MH-103' && e.head === 'MH-104')!;
+  const badEdge = net.edges.find((e) => e.tail === 'MH-104' && e.head === 'MH-103')!;
   const tSelect = Date.now();
-  await enterDepthAtNode(page, 'MH-103', badEdge.id, 'tail', '1.50');
+  await enterDepthAtNode(page, 'MH-104', badEdge.id, 'tail', '1.80');
   const sidebarOpen = await page.evaluate(
     () => !document.getElementById('unifiedSidebar')?.classList.contains('collapsed'),
   );
   record('depthEntry.selectNode', { sidebarOpen, msToFirstDepthEntered: Date.now() - tSelect });
   expect(sidebarOpen, 'tapping a node opens the details sidebar').toBe(true);
-  await enterDepthAtNode(page, 'MH-104', badEdge.id, 'head', '1.20');
+  await enterDepthAtNode(page, 'MH-103', badEdge.id, 'head', '1.20');
   note('depth-entry', 'minor',
     'Entering both depths of one pipe requires selecting each endpoint node in turn (panel exposes only the selected node\'s side) — a per-pipe context switch in the field');
   await page.waitForTimeout(600);
@@ -371,7 +416,7 @@ test('full network build via TSC3 emulator: UX audit + gradient intelligence', a
     record('baseline.depthEntryWarned', warned);
     if (!warned) {
       note('smartness', 'major',
-        'Depths entered give an invert level RISING along flow (102.60 → 103.35) — no immediate feedback at entry time');
+        'Depths entered give an invert level RISING along flow (102.75 → 102.90) — no immediate feedback at entry time');
     }
   }
 

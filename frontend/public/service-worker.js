@@ -34,7 +34,11 @@
 // v142: field-stepper UI committed (was working-tree-only since 2026-07-15):
 // stepper module + create-edit-gap fix in pointer handlers + TSC3 non-hijack
 // notify + stepper i18n keys.
-const APP_VERSION = 'v142';
+// v143: smart measurement wizard phase 1 — Z-aware auto-connect (edges created
+// higher→lower with undo snackbar), CONNECT screen for flat/missing-Z/far
+// shots, F.reverseEdge + edgeReverse undo, edge.direction_source provenance,
+// Home laterals locked Home→main, chain pointer skips Home nodes.
+const APP_VERSION = 'v143';
 const PRECACHE = 'graph-sketch-shell-' + APP_VERSION;
 const RUNTIME = 'graph-sketch-runtime-' + APP_VERSION;
 

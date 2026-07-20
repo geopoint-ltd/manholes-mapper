@@ -56,6 +56,8 @@ import {
   normalizeEntityForRules,
 } from '../utils/input-flow-engine.js';
 import { showSnackbar } from '../ui/snackbar.js';
+import { computeEdgeGradient } from '../features/gradient-engine.js';
+import { findEdgeBetween } from '../features/connection-suggest.js';
 import { isRTL } from '../i18n.js';
 
 const t = (...args) => (typeof window.t === 'function' ? window.t(...args) : args[0]);
@@ -95,6 +97,17 @@ let deadEndUnlockActive = false;
 let chipTapGuardUntil = 0;
 /** Handle of the currently visible "switch to it" TSC3 queue snackbar, if any. */
 let tsc3QueueSnackbar = null;
+/**
+ * Pending connection decisions — set by tsc3-handlers when terrain can't
+ * auto-decide (flat / missing Z / long jump / uphill existing edge). Keyed
+ * per node id: rapid ambiguous shots each keep their own undecided record
+ * (a single slot would let shot B silently discard shot A's never-shown
+ * decision — a topology hole with no feedback). While an entry exists for
+ * the open node, a CONNECT screen is prepended to the stepper sequence.
+ * Cleared on decision; kept on close so reopening the node re-offers it.
+ * Map<nodeId, { sketchId, suggestion }>
+ */
+const pendingConnects = new Map();
 
 // ── Per-field chip configuration ────────────────────────────────────────────
 const filterEnabled = (list) => (list || []).filter((o) => o?.enabled !== false);
@@ -230,8 +243,63 @@ function pickStartIndex(order, startField) {
   return order.length; // everything filled -> straight to the depths screen
 }
 
+// ── CONNECT screen state helpers ────────────────────────────────────────────
+
+/** Whether the open node has a pending connection decision (valid this sketch). */
+function hasConnectScreen() {
+  if (!currentNode) return false;
+  const entry = pendingConnects.get(String(currentNode.id));
+  return !!entry && entry.sketchId === (S.currentSketchId ?? null);
+}
+
+/** The open node's pending suggestion (callers must have checked hasConnectScreen). */
+function currentConnectSuggestion() {
+  return pendingConnects.get(String(currentNode.id)).suggestion;
+}
+
+/**
+ * A pending suggestion can go stale between shots (node deleted, edge created
+ * another way, sketch switched). Returns false when it should be dropped.
+ */
+function validatePendingConnect() {
+  if (!hasConnectScreen()) return false;
+  const s = currentConnectSuggestion();
+  const byId = (id) => S.nodes.find((n) => String(n.id) === String(id));
+  if (s.kind === 'flip-offer') {
+    return S.edges.some((e) => String(e.id) === String(s.edgeId));
+  }
+  return !!(byId(s.tail) && byId(s.head)) && !findEdgeBetween(S.edges, s.tail, s.head);
+}
+
+/**
+ * TSC3-arrival hook (spec §B3/B4): store the connection decision for a node so
+ * the stepper opens on the CONNECT screen. Pass a falsy suggestion to clear.
+ * When the replaced entry's CONNECT screen is on screen right now (re-measure
+ * refreshed the evidence), re-render so stale cards can't act on old data.
+ */
+export function setPendingConnectSuggestion(nodeId, suggestion) {
+  const id = String(nodeId);
+  const connectVisible =
+    isFieldStepperOpen() &&
+    currentNode &&
+    String(currentNode.id) === id &&
+    getScreenSequence()[currentIndex] === 'CONNECT';
+  if (suggestion) {
+    pendingConnects.set(id, { sketchId: S.currentSketchId ?? null, suggestion });
+  } else {
+    pendingConnects.delete(id);
+  }
+  if (connectVisible) render();
+}
+
+/** Pending suggestion for a node (this sketch), or null — for tsc3-handlers' re-measure refresh. */
+export function getPendingConnectSuggestion(nodeId) {
+  const entry = pendingConnects.get(String(nodeId));
+  return entry && entry.sketchId === (S.currentSketchId ?? null) ? entry.suggestion : null;
+}
+
 function getScreenSequence() {
-  return [...fieldOrderCache, 'DEPTHS', 'COMPLETION'];
+  return [...(hasConnectScreen() ? ['CONNECT'] : []), ...fieldOrderCache, 'DEPTHS', 'COMPLETION'];
 }
 
 // ── Navigation ───────────────────────────────────────────────────────────────
@@ -251,7 +319,9 @@ function advanceAfterSet(justSetKey) {
   const node = currentNode;
   fieldOrderCache = computeFieldOrder(node);
   const idx = fieldOrderCache.indexOf(justSetKey);
-  currentIndex = idx >= 0 ? idx + 1 : fieldOrderCache.length;
+  // A still-pending CONNECT screen occupies seq[0] — shift field indices past it.
+  const offset = hasConnectScreen() ? 1 : 0;
+  currentIndex = (idx >= 0 ? idx + 1 : fieldOrderCache.length) + offset;
   render();
 }
 
@@ -307,6 +377,12 @@ function renderHeader() {
   const seq = getScreenSequence();
   const activeKey = seq[currentIndex];
   dotsEl.innerHTML = '';
+  if (hasConnectScreen()) {
+    const dot = document.createElement('span');
+    dot.className =
+      'field-stepper-dot field-stepper-dot--stage' + (activeKey === 'CONNECT' ? ' field-stepper-dot--current' : '');
+    dotsEl.appendChild(dot);
+  }
   fieldOrderCache.forEach((key) => {
     const dot = document.createElement('span');
     const filled = key === 'note' ? !!(node.note && node.note.trim()) : wizardIsFieldFilled(node, key);
@@ -327,7 +403,7 @@ function renderHeader() {
 function renderCurrentValueLine() {
   const seq = getScreenSequence();
   const key = seq[currentIndex];
-  if (key === 'DEPTHS' || key === 'COMPLETION') {
+  if (key === 'DEPTHS' || key === 'COMPLETION' || key === 'CONNECT') {
     currentValueEl.hidden = true;
     currentValueEl.innerHTML = '';
     return;
@@ -586,6 +662,142 @@ function renderDepthsScreen() {
   renderNav('next', null);
 }
 
+// ── CONNECT screen (spec §B3/B3a/B3b/B4b) ───────────────────────────────────
+
+/** Decision made (or suggestion gone) — drop the screen and land on the first unfilled field. */
+function resolveConnect() {
+  // Delete only the open node's own record — other nodes' undecided
+  // suggestions (arrived while this screen was up) must survive.
+  pendingConnects.delete(String(currentNode.id));
+  fieldOrderCache = computeFieldOrder(currentNode);
+  currentIndex = pickStartIndex(fieldOrderCache, null);
+  render();
+}
+
+/**
+ * One tappable flow-direction card: "104 → 105" + slope verdict for that
+ * orientation. Terrain slope is recomputed per card so swapping shows the
+ * consequence (downhill ✓ vs uphill ⚠) before the user commits.
+ */
+function connectDirCard(tailId, headId, { recommended = false, unverified = false, onPick }) {
+  const byId = (id) => S.nodes.find((n) => String(n.id) === String(id));
+  const g = computeEdgeGradient(
+    { tail: tailId, head: headId, tail_measurement: '', head_measurement: '' },
+    byId,
+    S.coordinateScale ?? 50,
+  );
+  const arrow = isRTL(S.currentLang) ? '←' : '→';
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className =
+    'field-stepper-connect-card' + (recommended ? ' field-stepper-connect-card--recommended' : '');
+  let badge = '';
+  if (recommended) badge = `<span class="field-stepper-connect-badge">${esc(t('stepper.connectRecommended'))}</span>`;
+  else if (unverified) badge = `<span class="field-stepper-connect-badge field-stepper-connect-badge--warn">${esc(t('stepper.connectUnverified'))}</span>`;
+  let slope = '';
+  if (g.slopePct != null) {
+    const pct = Math.abs(g.slopePct).toFixed(1);
+    slope =
+      g.drop >= 0
+        ? `<span class="field-stepper-connect-slope field-stepper-connect-slope--ok">${esc(t('stepper.connectSlopeOk', pct))}</span>`
+        : `<span class="field-stepper-connect-slope field-stepper-connect-slope--up">${esc(t('stepper.connectSlopeUp', pct))}</span>`;
+  }
+  btn.innerHTML = `
+    <span class="field-stepper-connect-dir">${ltrToken(String(tailId))} ${arrow} ${ltrToken(String(headId))}</span>
+    <span class="field-stepper-connect-meta">${badge}${slope}</span>
+  `;
+  btn.addEventListener('click', onPick);
+  return btn;
+}
+
+function renderConnectScreen() {
+  const s = currentConnectSuggestion();
+  bodyEl.innerHTML = '';
+
+  const header = document.createElement('div');
+  header.className = 'field-stepper-field-header';
+  header.innerHTML = `<span class="material-icons" aria-hidden="true">account_tree</span><span>${esc(t('stepper.connectTitle'))}</span>`;
+  bodyEl.appendChild(header);
+
+  const explain = document.createElement('div');
+  explain.className = 'field-stepper-explainer';
+
+  if (s.kind === 'flip-offer') {
+    // Existing pair-edge runs uphill: offer the flip, but "keep" stays primary —
+    // reversing committed data must be the deliberate choice (spec §6.4).
+    const edge = S.edges.find((e) => String(e.id) === String(s.edgeId));
+    const pct = s.evidence?.slopePct != null ? Math.abs(s.evidence.slopePct).toFixed(1) : '';
+    // ids passed plain-escaped: the i18n string wraps the tail → head fragment
+    // in LRI/PDI isolates itself (gradient.* convention)
+    explain.innerHTML = `<span class="material-icons" aria-hidden="true">swap_vert</span><span>${esc(t('stepper.connectFlipQuestion', String(edge.tail), String(edge.head), pct))}</span>`;
+    bodyEl.appendChild(explain);
+
+    const grid = document.createElement('div');
+    grid.className = 'field-stepper-connect-list';
+    const keepBtn = document.createElement('button');
+    keepBtn.type = 'button';
+    keepBtn.className = 'field-stepper-connect-card field-stepper-connect-card--recommended';
+    keepBtn.innerHTML = `<span class="field-stepper-connect-dir">${esc(t('stepper.connectKeep'))}</span>`;
+    keepBtn.addEventListener('click', resolveConnect);
+    grid.appendChild(keepBtn);
+    const flipBtn = document.createElement('button');
+    flipBtn.type = 'button';
+    flipBtn.className = 'field-stepper-connect-card';
+    flipBtn.innerHTML = `<span class="field-stepper-connect-dir">${esc(t('stepper.connectFlip'))}</span>`;
+    flipBtn.addEventListener('click', () => {
+      F.reverseEdge(s.edgeId, { directionSource: 'terrain' });
+      resolveConnect();
+    });
+    grid.appendChild(flipBtn);
+    bodyEl.appendChild(grid);
+    renderNav('skip', null);
+    return;
+  }
+
+  // 'ask' — direction decision for a not-yet-created edge
+  const otherId = s.tail === String(currentNode.id) ? s.head : s.tail;
+  const dz = s.evidence?.deltaZ != null ? Math.abs(s.evidence.deltaZ).toFixed(2) : null;
+  const lenM = s.evidence?.lengthM != null ? Math.round(s.evidence.lengthM) : null;
+  let reasonHtml = `<span>${esc(t('stepper.connectQuestion', String(otherId)))}</span>`;
+  if (s.reason === 'flat') reasonHtml += `<span class="field-stepper-connect-reason">${esc(t('stepper.connectFlat', dz ?? '0.00'))}</span>`;
+  else if (s.reason === 'no-z') reasonHtml += `<span class="field-stepper-connect-reason">${esc(t('stepper.connectNoZ'))}</span>`;
+  else if (s.reason === 'far') reasonHtml += `<span class="field-stepper-connect-reason">${esc(t('stepper.connectFar', lenM ?? '?'))}</span>`;
+  explain.innerHTML = `<span class="material-icons" aria-hidden="true">route</span><span class="field-stepper-connect-question">${reasonHtml}</span>`;
+  bodyEl.appendChild(explain);
+
+  const pick = (tailId, headId, viaRecommended) => () => {
+    // Provenance: accepted terrain recommendation → 'terrain'; chronological
+    // fallback (missing Z) → 'chronological'; any other explicit pick → 'user'.
+    const directionSource =
+      viaRecommended && s.preselect && s.hasZ ? 'terrain'
+      : s.hasZ === false && tailId === s.tail ? 'chronological'
+      : 'user';
+    F.createEdge(tailId, headId, { directionSource });
+    resolveConnect();
+  };
+
+  const grid = document.createElement('div');
+  grid.className = 'field-stepper-connect-list';
+  const unverified = s.hasZ === false;
+  // 'far': "no connection" is the primary card (spec §C2) — the downhill
+  // direction keeps its slope badge but must not compete as a second primary.
+  grid.appendChild(connectDirCard(s.tail, s.head, { recommended: s.preselect && s.reason !== 'far', unverified, onPick: pick(s.tail, s.head, true) }));
+  grid.appendChild(connectDirCard(s.head, s.tail, { onPick: pick(s.head, s.tail, false) }));
+
+  const noneBtn = document.createElement('button');
+  noneBtn.type = 'button';
+  noneBtn.className =
+    'field-stepper-connect-card field-stepper-connect-card--none' +
+    (s.reason === 'far' ? ' field-stepper-connect-card--recommended' : '');
+  noneBtn.innerHTML = `<span class="field-stepper-connect-dir">${esc(t('stepper.connectNone'))}</span>`;
+  noneBtn.addEventListener('click', resolveConnect);
+  if (s.reason === 'far') grid.prepend(noneBtn);
+  else grid.appendChild(noneBtn);
+  bodyEl.appendChild(grid);
+
+  renderNav('skip', null);
+}
+
 function renderCompletionScreen() {
   const node = currentNode;
   bodyEl.innerHTML = '';
@@ -652,7 +864,8 @@ function render() {
   const key = seq[currentIndex];
   renderHeader();
   renderCurrentValueLine();
-  if (key === 'DEPTHS') renderDepthsScreen();
+  if (key === 'CONNECT') renderConnectScreen();
+  else if (key === 'DEPTHS') renderDepthsScreen();
   else if (key === 'COMPLETION') renderCompletionScreen();
   else renderFieldScreen(key);
 }
@@ -721,7 +934,10 @@ export function openFieldStepper(node, opts = {}) {
   skippedFields = new Set();
   applyEngineRulesEagerFillIfChanged(node);
   fieldOrderCache = computeFieldOrder(node);
-  currentIndex = pickStartIndex(fieldOrderCache, opts.startField);
+  // Stale connection suggestions (edge created meanwhile, node gone, sketch
+  // switched) are dropped here — the CONNECT screen only ever shows live ones.
+  if (hasConnectScreen() && !validatePendingConnect()) pendingConnects.delete(String(node.id));
+  currentIndex = hasConnectScreen() ? 0 : pickStartIndex(fieldOrderCache, opts.startField);
   overlayEl.classList.add('open');
   render();
 }

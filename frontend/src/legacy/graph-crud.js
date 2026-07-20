@@ -138,7 +138,8 @@ export function createNode(x, y) {
  * Supports dangling edges where either tailId or headId is null.
  * @param {string|number|null} tailId - Source node id (null for inbound dangling edge)
  * @param {string|number|null} headId - Target node id (null for outbound dangling edge)
- * @param {object} options - Optional: { danglingEndpoint: {x, y}, tailPosition: {x, y} }
+ * @param {object} options - Optional: { danglingEndpoint: {x, y}, tailPosition: {x, y},
+ *   directionSource: 'chronological'|'terrain'|'invert'|'user' }
  * @returns {object|null} The created edge, or null if duplicate exists
  */
 export function createEdge(tailId, headId, options = {}) {
@@ -178,6 +179,11 @@ export function createEdge(tailId, headId, options = {}) {
     material: (S.adminConfig.edges?.defaults?.material ?? EDGE_MATERIALS[0]),
     maintenanceStatus: 0,
     engineeringStatus: (S.adminConfig.edges?.defaults?.engineering_status ?? 0),
+    // Provenance of the tail→head arrow: 'user' (deliberate, final),
+    // 'terrain' (Z-suggested), 'chronological' (measurement order — a guess),
+    // 'invert' (confirmed by depths). Guessed directions get re-checked when
+    // depth data arrives; user/invert ones are never nagged.
+    direction_source: options.directionSource || 'user',
     createdAt: new Date().toISOString(),
     createdBy: F.getCurrentUsername(),
   };
@@ -198,6 +204,43 @@ export function createEdge(tailId, headId, options = {}) {
   navigator.vibrate?.(10);
   F.scheduleDraw();
   window.menuEvents?.emit('edge:added', { edgeId: edge.id, isDangling: edge.isDangling });
+  return edge;
+}
+
+/**
+ * Reverse a connected edge's flow direction in place: swap tail↔head AND the
+ * endpoint depth measurements (tail_measurement travels with the tail node —
+ * leaving them behind would silently corrupt both invert levels).
+ * Undoable ('edgeReverse' is self-inverse); triggers a gradient recheck.
+ *
+ * @param {string|number} edgeId
+ * @param {{ directionSource?: string }} options - provenance of the NEW direction
+ *   ('user' for a deliberate flip, 'terrain'/'invert' when accepting a suggestion)
+ * @returns {object|null} The edge, or null (read-only sketch / not found / dangling)
+ */
+export function reverseEdge(edgeId, options = {}) {
+  if (window.__sketchReadOnly) {
+    F.showToast(t('toasts.sketchReadOnly') || 'Sketch is locked — read only', 'warning', 2500);
+    return null;
+  }
+  const edge = S.edges.find((e) => String(e.id) === String(edgeId));
+  if (!edge || edge.isDangling || edge.tail == null || edge.head == null) return null;
+
+  F.pushUndo({
+    type: 'edgeReverse',
+    edgeId: edge.id,
+    prevDirectionSource: edge.direction_source,
+    newDirectionSource: options.directionSource || 'user',
+  });
+  [edge.tail, edge.head] = [edge.head, edge.tail];
+  [edge.tail_measurement, edge.head_measurement] = [edge.head_measurement, edge.tail_measurement];
+  edge.direction_source = options.directionSource || 'user';
+  F.computeNodeTypes();
+  F.markEdgeLabelCacheDirty();
+  F.saveToStorage();
+  window.__gradientEngine?.evaluateEdge(edge);
+  F.scheduleDraw();
+  window.menuEvents?.emit('edge:reversed', { edgeId: edge.id });
   return edge;
 }
 

@@ -19,7 +19,9 @@ import { initSketchSidePanel } from '../project/sketch-side-panel.js';
 import { menuEvents } from '../menu/menu-events.js';
 import { saveCoordinatesToStorage } from '../utils/coordinates.js';
 import { STORAGE_KEYS } from '../state/persistence.js';
-import { notifyStepperOfExternalNodeUpdate } from '../field-stepper/field-stepper.js';
+import { notifyStepperOfExternalNodeUpdate, setPendingConnectSuggestion, getPendingConnectSuggestion } from '../field-stepper/field-stepper.js';
+import { suggestChainConnection } from '../features/connection-suggest.js';
+import { showSnackbar } from '../ui/snackbar.js';
 
 // Convenience wrappers
 const t = (...args) => F.t(...args);
@@ -86,16 +88,70 @@ export function handleTSC3PointReceived(pointName, coords, isNew, nodeType) {
   // Apply coordinates to reposition nodes on canvas
   F.applyCoordinatesIfEnabled();
 
-  // Auto-connect to previous survey node
+  // Z-aware auto-connect to the previous survey node (spec: docs/SMART_MEASUREMENT_WIZARD.md §B).
+  // Unambiguous terrain → edge created higher-Z→lower-Z silently (undoable
+  // snackbar below); ambiguous → the decision rides the field stepper's
+  // CONNECT screen instead of a blind chronological guess.
   const prevSurveyNodeId = S.lastSurveyNodeId;
+  let autoConnectedEdge = null;
+  let autoConnectEvidence = null;
   if (isNew && S.surveyAutoConnect && prevSurveyNodeId) {
-    F.createEdge(prevSurveyNodeId, node.id);
+    const prevNode = S.nodes.find((n) => String(n.id) === String(prevSurveyNodeId));
+    const suggestion = suggestChainConnection(node, prevNode, {
+      edges: S.edges,
+      coordinateScale: S.coordinateScale,
+    });
+    if (suggestion.kind === 'auto') {
+      autoConnectedEdge = F.createEdge(suggestion.tail, suggestion.head, { directionSource: 'terrain' });
+      autoConnectEvidence = suggestion.evidence || null;
+    } else if (suggestion.kind === 'auto-home') {
+      autoConnectedEdge = F.createEdge(suggestion.tail, suggestion.head, { directionSource: 'user' });
+    } else if (suggestion.kind === 'ask' || suggestion.kind === 'flip-offer') {
+      setPendingConnectSuggestion(node.id, suggestion);
+    }
+    // 'exists' / 'none': silently nothing — an already-connected pair must
+    // never re-surface as a toast (the old edgeExists ping-pong).
+  } else if (!isNew) {
+    // Re-measure with an undecided CONNECT suggestion for this node: the Z
+    // just changed, so the stored evidence (and possibly the whole tier) is
+    // stale. Recompute against the same pair; a now-decisive Z demotes to a
+    // preselected ask (not silent AUTO — the user was already being asked).
+    const stale = getPendingConnectSuggestion(node.id);
+    if (stale && (stale.kind === 'ask' || stale.kind === 'flip-offer')) {
+      const otherId = stale.kind === 'flip-offer'
+        ? null // flip-offer re-validates via its edge below
+        : String(stale.tail) === String(node.id) ? stale.head : stale.tail;
+      const otherNode = otherId != null ? S.nodes.find((n) => String(n.id) === String(otherId)) : null;
+      if (stale.kind === 'ask' && otherNode) {
+        const fresh = suggestChainConnection(node, otherNode, {
+          edges: S.edges,
+          coordinateScale: S.coordinateScale,
+        });
+        if (fresh.kind === 'ask' || fresh.kind === 'flip-offer') {
+          setPendingConnectSuggestion(node.id, fresh);
+        } else if (fresh.kind === 'auto' || fresh.kind === 'auto-home') {
+          setPendingConnectSuggestion(node.id, {
+            kind: 'ask', reason: 'terrain', hasZ: true,
+            tail: fresh.tail, head: fresh.head, preselect: true,
+            evidence: fresh.evidence || null,
+          });
+        } else {
+          setPendingConnectSuggestion(node.id, null);
+        }
+      } else if (stale.kind === 'ask') {
+        setPendingConnectSuggestion(node.id, null); // pair node gone
+      }
+    }
   }
   // Track the most recent surveyed node for chaining. Re-measures count too:
   // a surveyor who just re-shot an existing manhole expects the next new
   // point to connect to it — tracking only new points left auto-connect
   // silently dead after any name-match update.
-  S.lastSurveyNodeId = node.id;
+  // Home nodes normally never take the pointer (a house lateral is a dead
+  // end — the next shot chains to the main line, not to the house), EXCEPT
+  // when there is no pointer yet: a session that opens with a Home shot must
+  // still offer that lateral to the first main-line shot that follows.
+  if (node.nodeType !== 'Home' || !S.lastSurveyNodeId) S.lastSurveyNodeId = node.id;
 
   // Smart check: gradients of every pipe touching this node, the moment the
   // measurement lands (negative-gradient alerts fire from the engine).
@@ -133,19 +189,53 @@ export function handleTSC3PointReceived(pointName, coords, isNew, nodeType) {
     (g) => g && (g.status === 'negative' || g.status === 'low'),
   );
   const elevText = Number(coords.elevation) ? Number(coords.elevation).toFixed(2) : '?';
-  let slopeSuffix = '';
-  if (isNew && prevSurveyNodeId) {
-    const chainEdge = S.edges.find(
-      (e) => String(e.tail) === String(prevSurveyNodeId) && String(e.head) === String(node.id),
-    );
-    const g = chainEdge ? window.__gradientEngine?.compute(chainEdge) : null;
-    if (g?.status === 'ok' && g.slopePct != null) slopeSuffix = t('survey.slopeToPrev', g.slopePct.toFixed(1)) || '';
-  }
+  const typeKey = `nodeTypeLabel.${String(node.nodeType || 'Manhole').toLowerCase()}`;
+  const rawLabel = t(typeKey);
+  const typeLabel = rawLabel && rawLabel !== typeKey ? rawLabel : node.nodeType;
   if (!anyGradientProblem) {
-    if (isNew) {
-      const typeKey = `nodeTypeLabel.${String(node.nodeType || 'Manhole').toLowerCase()}`;
-      const rawLabel = t(typeKey);
-      const typeLabel = rawLabel && rawLabel !== typeKey ? rawLabel : node.nodeType;
+    if (isNew && autoConnectedEdge) {
+      // Auto-connect happened: one numbers-rich snackbar carrying the
+      // measurement, the created connection, AND an Undo action (the edge was
+      // created without asking — the escape hatch must be right there).
+      const g = autoConnectEvidence || window.__gradientEngine?.compute(autoConnectedEdge) || {};
+      const parts = [];
+      if (g.slopePct != null) parts.push(t('survey.slopePart', Math.abs(g.slopePct).toFixed(1)));
+      if (g.lengthM != null) parts.push(t('survey.lengthPart', Math.round(g.lengthM)));
+      const edgeRef = autoConnectedEdge;
+      showSnackbar({
+        message:
+          (t('survey.measuredNew', typeLabel, pointName, elevText) || `${typeLabel} ${pointName} measured`) +
+          ' • ' +
+          t('survey.autoConnected', String(edgeRef.tail), String(edgeRef.head)) +
+          (parts.length ? ' • ' + parts.join(' • ') : ''),
+        variant: 'success',
+        kind: 'auto-connect',
+        // Default success duration (2.4s) is too short for the ONLY inline
+        // escape hatch of a silently created edge — touch can't hover-pause.
+        duration: 8000,
+        actions: [
+          {
+            label: t('survey.autoConnectUndo'),
+            onClick: () => {
+              if (S.edges.includes(edgeRef)) F.deleteEdgeShared(edgeRef, true, true);
+            },
+          },
+        ],
+      });
+    } else if (isNew) {
+      let slopeSuffix = '';
+      if (prevSurveyNodeId) {
+        // Either orientation: the chain edge may point new→prev when terrain
+        // decided the direction on an earlier shot.
+        const chainEdge = S.edges.find(
+          (e) =>
+            !e.isDangling &&
+            ((String(e.tail) === String(prevSurveyNodeId) && String(e.head) === String(node.id)) ||
+              (String(e.tail) === String(node.id) && String(e.head) === String(prevSurveyNodeId))),
+        );
+        const g = chainEdge ? window.__gradientEngine?.compute(chainEdge) : null;
+        if (g?.status === 'ok' && g.slopePct != null) slopeSuffix = t('survey.slopeToPrev', g.slopePct.toFixed(1)) || '';
+      }
       F.showToast((t('survey.measuredNew', typeLabel, pointName, elevText) || `${typeLabel} ${pointName} measured`) + slopeSuffix, 'success');
     } else {
       F.showToast(t('survey.measuredAgain', pointName, elevText) || `Point ${pointName} updated`, 'success');

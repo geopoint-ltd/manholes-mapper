@@ -36,7 +36,7 @@ const TOL_TERRAIN_M = 0.05;
 export const GRADIENT_EXEMPT_TYPES = new Set(['Home', 'ForLater', 'Issue']);
 
 /** Elevation from a node; parser coerces missing elevation to 0 → treat 0 as unset. */
-function elevationOf(node) {
+export function elevationOf(node) {
   if (!node || node.surveyZ == null || node.surveyZ === '') return null;
   const z = Number(node.surveyZ);
   return Number.isNaN(z) || z === 0 ? null : z;
