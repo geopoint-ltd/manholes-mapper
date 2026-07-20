@@ -577,6 +577,37 @@ describe('Action Rail', () => {
     });
   });
 
+  describe('TSC3 button', () => {
+    it('should delegate to the mobile Bluetooth connect button when present', () => {
+      const origBtn = document.createElement('button');
+      origBtn.id = 'mobileConnectSurveyBluetoothBtn';
+      document.body.appendChild(origBtn);
+      const clickSpy = vi.spyOn(origBtn, 'click');
+
+      initActionRail();
+      document.getElementById('railTsc3Btn')?.click();
+
+      expect(clickSpy).toHaveBeenCalled();
+    });
+
+    it('should emit connectSurveyBluetooth when the mobile button is absent', () => {
+      initActionRail();
+      const handler = vi.fn();
+      menuEvents.on('connectSurveyBluetooth', handler);
+
+      document.getElementById('railTsc3Btn')?.click();
+
+      expect(handler).toHaveBeenCalled();
+    });
+
+    it('should not throw when neither the mobile button nor menuEvents exist', () => {
+      (window as any).menuEvents = undefined;
+      initActionRail();
+
+      expect(() => document.getElementById('railTsc3Btn')?.click()).not.toThrow();
+    });
+  });
+
   describe('TSC3 indicator', () => {
     it('should add connected class on tsc3:connected event', () => {
       initActionRail();

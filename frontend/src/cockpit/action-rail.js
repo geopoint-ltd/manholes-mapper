@@ -35,11 +35,19 @@ export function initActionRail() {
   }
 
   // ── TSC3 Survey Controller ──────────────────────────────
+  // Route through the same 'connectSurveyBluetooth' entry point as the mobile
+  // menu and the More Menu item: tsc3-handlers.js discovers the paired devices
+  // first and only then opens the picker with them. Importing the picker here
+  // and calling it directly skipped that discovery step.
   const tsc3Btn = document.getElementById('railTsc3Btn');
   if (tsc3Btn) {
-    tsc3Btn.addEventListener('click', async () => {
-      const { openDevicePickerDialog } = await import('../survey/device-picker-dialog.js');
-      openDevicePickerDialog();
+    tsc3Btn.addEventListener('click', () => {
+      const origBtn = document.getElementById('mobileConnectSurveyBluetoothBtn');
+      if (origBtn) {
+        origBtn.click();
+      } else if (window.menuEvents) {
+        window.menuEvents.emit('connectSurveyBluetooth', { element: tsc3Btn });
+      }
     });
   }
 

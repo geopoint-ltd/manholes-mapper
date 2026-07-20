@@ -105,6 +105,12 @@ function _ensureStyles() {
       opacity: 0.55;
       padding-inline-start: 16px;
     }
+    .device-picker-empty {
+      padding: 24px 8px;
+      text-align: center;
+      font-size: 14px;
+      opacity: 0.6;
+    }
     .device-picker-cancel {
       margin-top: 16px;
       padding: 10px 24px;
@@ -131,14 +137,18 @@ function _ensureStyles() {
 /**
  * Build and show the device picker dialog.
  *
- * @param {Array<{ name: string, address: string, isSurvey?: boolean }>} devices
- *   List of paired devices to present.
+ * @param {Array<{ name: string, address: string, isSurvey?: boolean }>} [devices]
+ *   List of paired devices to present. A missing, non-array or empty list
+ *   renders an empty state rather than throwing — callers that have not
+ *   discovered devices yet still get a dismissable dialog.
  * @param {Function} t - i18n translator function (may be undefined).
  * @returns {Promise<{ name: string, address: string, isSurvey?: boolean } | null>}
  *   Resolves with the chosen device, or null if the user cancels.
  */
 export function openDevicePickerDialog(devices, t) {
   _ensureStyles();
+
+  const deviceList = Array.isArray(devices) ? devices : [];
 
   // Remove any stale instance from a prior call.
   const existing = document.getElementById(DIALOG_ID);
@@ -157,7 +167,7 @@ export function openDevicePickerDialog(devices, t) {
 
     // Build the device button list HTML. Content is constructed from structured
     // data rather than unsanitized strings, so no XSS risk here.
-    const listItems = devices.map((device) => {
+    const listItems = deviceList.map((device) => {
       const isSurvey = Boolean(device.isSurvey);
       return `
         <button
@@ -175,7 +185,7 @@ export function openDevicePickerDialog(devices, t) {
       <div class="device-picker-overlay"></div>
       <div class="device-picker-content">
         <h3 class="device-picker-title"></h3>
-        <div class="device-picker-list">${listItems}</div>
+        <div class="device-picker-list">${listItems || '<p class="device-picker-empty"></p>'}</div>
         <button class="device-picker-cancel" type="button"></button>
       </div>
     `;
@@ -184,9 +194,14 @@ export function openDevicePickerDialog(devices, t) {
     dialogEl.querySelector('.device-picker-title').textContent = title;
     dialogEl.querySelector('.device-picker-cancel').textContent = cancelLabel;
 
+    const emptyEl = dialogEl.querySelector('.device-picker-empty');
+    if (emptyEl) {
+      emptyEl.textContent = t ? t('survey.noDevicesFound') : 'No devices found';
+    }
+
     const btns = dialogEl.querySelectorAll('.device-picker-btn');
     btns.forEach((btn, index) => {
-      const device = devices[index];
+      const device = deviceList[index];
       btn.querySelector('.device-picker-name').textContent = device.name || device.address;
       btn.querySelector('.device-picker-address').textContent = device.address || '';
     });
@@ -202,7 +217,7 @@ export function openDevicePickerDialog(devices, t) {
 
     // Device selection
     btns.forEach((btn, index) => {
-      btn.addEventListener('click', () => _close(devices[index]));
+      btn.addEventListener('click', () => _close(deviceList[index]));
     });
 
     // Cancel / overlay dismiss
