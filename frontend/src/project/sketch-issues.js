@@ -244,8 +244,35 @@ export function computeSketchIssues(nodes, edges) {
   }
 
   const notLastManholeIssues = issues.filter(i => i.type === 'not_last_manhole');
-  const nlmNodeIds = new Set(notLastManholeIssues.map(i => String(i.nodeId)));
   const mergedNodeIds = new Set();
+
+  // Bucket the stubs into a spatial hash sized to the search radius, so each
+  // candidate only tests the 9 cells that can hold a match. Pairing every
+  // not-last-manhole against every stub was quadratic: on a part-surveyed 10k
+  // network both sets run to thousands and this scan alone took tens of ms,
+  // re-run on every data change.
+  const CELL = MERGE_DISTANCE_THRESHOLD_M;
+  const coordOf = (n) => [
+    n.surveyX != null ? n.surveyX : (n.x || 0) / 50,
+    n.surveyY != null ? n.surveyY : (n.y || 0) / 50,
+  ];
+  /** @type {Map<string, Array<{node: object, x: number, y: number}>>} */
+  const stubGrid = new Map();
+  for (const nodeB of stubNodes) {
+    const [bX, bY] = coordOf(nodeB);
+    const key = `${Math.floor(bX / CELL)},${Math.floor(bY / CELL)}`;
+    let bucket = stubGrid.get(key);
+    if (!bucket) { bucket = []; stubGrid.set(key, bucket); }
+    bucket.push({ node: nodeB, x: bX, y: bY });
+  }
+
+  // Rewrites are collected and applied in a single pass at the end; doing them
+  // inline cost an indexOf + findIndex + splice scan of `issues` per match.
+  /** @type {Map<object, object>} original not_last_manhole issue → replacement */
+  const replacements = new Map();
+  /** @type {Set<string>} node ids whose not_last_manhole issue is superseded */
+  const absorbedNodeIds = new Set();
+  const maxDistSq = MERGE_DISTANCE_THRESHOLD_M * MERGE_DISTANCE_THRESHOLD_M;
 
   for (const nlm of notLastManholeIssues) {
     const nodeA = nodeMap.get(String(nlm.nodeId));
@@ -253,47 +280,70 @@ export function computeSketchIssues(nodes, edges) {
     const idA = String(nodeA.id);
     if (edgeCountMap.get(idA) !== 1) continue;
     if (hasMeasurementMap.has(idA)) continue;
+    // A node already paired off can't be the anchor of a second suggestion.
+    if (mergedNodeIds.has(idA)) continue;
     const compA = components.get(idA);
 
-    const aX = nodeA.surveyX != null ? nodeA.surveyX : (nodeA.x || 0) / 50;
-    const aY = nodeA.surveyY != null ? nodeA.surveyY : (nodeA.y || 0) / 50;
+    const [aX, aY] = coordOf(nodeA);
 
     let bestNode = null;
-    let bestDist = Infinity;
+    let bestDistSq = Infinity;
 
-    for (const nodeB of stubNodes) {
-      if (nodeB === nodeA) continue;
-      const idB = String(nodeB.id);
-      if (mergedNodeIds.has(idB)) continue;
-      if (components.get(idB) === compA) continue;
-
-      const bX = nodeB.surveyX != null ? nodeB.surveyX : (nodeB.x || 0) / 50;
-      const bY = nodeB.surveyY != null ? nodeB.surveyY : (nodeB.y || 0) / 50;
-      const dist = Math.sqrt((aX - bX) ** 2 + (aY - bY) ** 2);
-
-      if (dist < MERGE_DISTANCE_THRESHOLD_M && dist < bestDist) {
-        bestDist = dist;
-        bestNode = nodeB;
+    const cx = Math.floor(aX / CELL);
+    const cy = Math.floor(aY / CELL);
+    for (let gx = cx - 1; gx <= cx + 1; gx++) {
+      for (let gy = cy - 1; gy <= cy + 1; gy++) {
+        const bucket = stubGrid.get(`${gx},${gy}`);
+        if (!bucket) continue;
+        for (let k = 0; k < bucket.length; k++) {
+          const entry = bucket[k];
+          const nodeB = entry.node;
+          if (nodeB === nodeA) continue;
+          const idB = String(nodeB.id);
+          if (mergedNodeIds.has(idB)) continue;
+          if (components.get(idB) === compA) continue;
+          const dx = aX - entry.x;
+          const dy = aY - entry.y;
+          const distSq = dx * dx + dy * dy;
+          if (distSq < maxDistSq && distSq < bestDistSq) {
+            bestDistSq = distSq;
+            bestNode = nodeB;
+          }
+        }
       }
     }
 
     if (bestNode) {
       mergedNodeIds.add(idA);
       mergedNodeIds.add(String(bestNode.id));
-      const idx = issues.indexOf(nlm);
-      issues[idx] = {
+      absorbedNodeIds.add(String(bestNode.id));
+      replacements.set(nlm, {
         type: 'merge_candidate',
         nodeId: nodeA.id,
         mergeNodeId: bestNode.id,
-        distanceM: Math.round(bestDist),
+        distanceM: Math.round(Math.sqrt(bestDistSq)),
         worldX: nodeA.x || 0,
         worldY: nodeA.y || 0,
         mergeWorldX: bestNode.x || 0,
         mergeWorldY: bestNode.y || 0,
-      };
-      const bestNlmIdx = issues.findIndex(i => i.type === 'not_last_manhole' && String(i.nodeId) === String(bestNode.id));
-      if (bestNlmIdx !== -1) issues.splice(bestNlmIdx, 1);
+      });
     }
+  }
+
+  if (replacements.size > 0) {
+    let write = 0;
+    for (let read = 0; read < issues.length; read++) {
+      const issue = issues[read];
+      const replacement = replacements.get(issue);
+      if (replacement) {
+        issues[write++] = replacement;
+      } else if (issue.type === 'not_last_manhole' && absorbedNodeIds.has(String(issue.nodeId))) {
+        continue; // folded into the partner's merge_candidate issue
+      } else {
+        issues[write++] = issue;
+      }
+    }
+    issues.length = write;
   }
 
   console.timeEnd('[PERF] computeIssues:mergeCandidate');
