@@ -18,6 +18,15 @@ export const STORAGE_KEYS = {
   autoSize: 'graphSketch.autoSize',
 };
 
+// In-memory copy of the IndexedDB current sketch for when localStorage cannot
+// hold it (QuotaExceededError on large sketches). loadFromStorage() falls back
+// to this when the localStorage mirror is missing.
+let idbCurrentFallback = null;
+
+export function getIdbCurrentFallback() {
+  return idbCurrentFallback;
+}
+
 export async function restoreFromIndexedDbIfNeeded() {
   try {
     const [current, library] = await Promise.all([
@@ -26,8 +35,31 @@ export async function restoreFromIndexedDbIfNeeded() {
     ]);
 
     try {
-      if (!localStorage.getItem(STORAGE_KEYS.sketch) && current) {
-        localStorage.setItem(STORAGE_KEYS.sketch, JSON.stringify(current));
+      if (current) {
+        // A quota-failed save leaves an OLDER snapshot in localStorage while
+        // IndexedDB holds the fresh copy — the localStorage mirror must never
+        // shadow a newer IndexedDB sketch.
+        let lsIsStale = false;
+        const existingJson = localStorage.getItem(STORAGE_KEYS.sketch);
+        if (existingJson) {
+          try {
+            const existing = JSON.parse(existingJson);
+            lsIsStale = !!(current.lastEditedAt && existing?.lastEditedAt &&
+              new Date(current.lastEditedAt) > new Date(existing.lastEditedAt));
+          } catch (_) {
+            lsIsStale = true; // corrupt localStorage JSON — IndexedDB wins
+          }
+        }
+        if (!existingJson || lsIsStale) {
+          try {
+            localStorage.setItem(STORAGE_KEYS.sketch, JSON.stringify(current));
+          } catch (_) {
+            // Sketch too large for localStorage: surface it via the in-memory
+            // fallback and drop any stale mirror so it can't be loaded instead.
+            idbCurrentFallback = current;
+            try { localStorage.removeItem(STORAGE_KEYS.sketch); } catch (_) {}
+          }
+        }
       }
     } catch (_) {}
 

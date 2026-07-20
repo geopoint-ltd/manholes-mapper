@@ -7,7 +7,7 @@
  * Calls cross-module functions through the shared F registry.
  */
 
-import { STORAGE_KEYS, idbSaveCurrentCompat } from '../state/persistence.js';
+import { STORAGE_KEYS, idbSaveCurrentCompat, getIdbCurrentFallback } from '../state/persistence.js';
 import { isNumericId } from '../graph/id-utils.js';
 import { DEFAULT_INPUT_FLOW_CONFIG } from '../state/constants.js';
 import {
@@ -245,8 +245,13 @@ export function normalizeLegacySketch(nodes, edges) {
 export function loadFromStorage() {
   try {
     const data = localStorage.getItem(STORAGE_KEYS.sketch);
-    if (!data) return false;
-    const parsed = JSON.parse(data);
+    let parsed = null;
+    if (data) {
+      try { parsed = JSON.parse(data); } catch (_) { parsed = null; }
+    }
+    // Sketches too large for localStorage live only in IndexedDB;
+    // restoreFromIndexedDbIfNeeded() stashes them in an in-memory fallback.
+    if (!parsed) parsed = getIdbCurrentFallback();
     if (!parsed || !parsed.nodes || !parsed.edges) return false;
     S.nodes = parsed.nodes;
     S._nodeMapDirty = true; S._spatialGridDirty = true; S._dataVersion++;
@@ -340,8 +345,11 @@ export function saveToStorage() {
     } catch (err) {
       // QuotaExceededError must not abort the rest of doSave — localStorage is
       // the synchronous mirror; IndexedDB and cloud sync below are the durable
-      // copies and must still run.
+      // copies and must still run. Drop the old mirror too: a stale snapshot
+      // left in localStorage would shadow the fresh IndexedDB copy on the next
+      // load (restore only fills localStorage when the key is absent).
       console.warn('[Storage] localStorage sketch save failed:', err?.message);
+      try { localStorage.removeItem(STORAGE_KEYS.sketch); } catch (_) { /* ignore */ }
     }
     idbSaveCurrentCompat(payload);
     
