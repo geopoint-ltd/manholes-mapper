@@ -47,7 +47,7 @@ describe('tsc3-parser', () => {
   describe('parseSurveyLine', () => {
     it('should parse a standard CSV line (NEN format)', () => {
       const result = parseSurveyLine('1,182456.789,654321.123,45.67');
-      expect(result).toEqual({
+      expect(result).toMatchObject({
         pointName: '1',
         easting: 182456.789,
         northing: 654321.123,
@@ -57,7 +57,7 @@ describe('tsc3-parser', () => {
 
     it('should parse NNE format (northing first)', () => {
       const result = parseSurveyLine('MH5,654321.123,182456.789,45.67');
-      expect(result).toEqual({
+      expect(result).toMatchObject({
         pointName: 'MH5',
         easting: 182456.789,
         northing: 654321.123,
@@ -67,7 +67,7 @@ describe('tsc3-parser', () => {
 
     it('should parse tab-delimited data', () => {
       const result = parseSurveyLine('1\t182456.789\t654321.123\t45.67');
-      expect(result).toEqual({
+      expect(result).toMatchObject({
         pointName: '1',
         easting: 182456.789,
         northing: 654321.123,
@@ -77,7 +77,7 @@ describe('tsc3-parser', () => {
 
     it('should parse space-delimited data', () => {
       const result = parseSurveyLine('1 182456.789 654321.123 45.67');
-      expect(result).toEqual({
+      expect(result).toMatchObject({
         pointName: '1',
         easting: 182456.789,
         northing: 654321.123,
@@ -87,7 +87,7 @@ describe('tsc3-parser', () => {
 
     it('should handle lines with only 3 fields (no elevation)', () => {
       const result = parseSurveyLine('1,182456.789,654321.123');
-      expect(result).toEqual({
+      expect(result).toMatchObject({
         pointName: '1',
         easting: 182456.789,
         northing: 654321.123,
@@ -97,12 +97,18 @@ describe('tsc3-parser', () => {
 
     it('should ignore extra trailing fields', () => {
       const result = parseSurveyLine('1,182456.789,654321.123,45.67,CODE,description text');
-      expect(result).toEqual({
+      expect(result).toMatchObject({
         pointName: '1',
         easting: 182456.789,
         northing: 654321.123,
         elevation: 45.67,
       });
+    });
+
+    it('should preserve the raw device line, including trailing fields', () => {
+      const line = '1,182456.789,654321.123,45.67,CODE,description text';
+      const result = parseSurveyLine(`  ${line}  `);
+      expect(result?.raw).toBe(line);
     });
 
     it('should skip comment lines starting with #', () => {

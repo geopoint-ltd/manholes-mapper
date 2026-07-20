@@ -16,6 +16,7 @@ import {
 } from '../project/project-canvas-state.js';
 import { getLastEditPosition, setLastEditPosition } from '../project/last-edit-tracker.js';
 import { getUsername as getAuthUsername } from '../auth/auth-guard.js';
+import { appendMeasurement, sanitizeMeasurements } from '../utils/measurement-history.js';
 import { S, F } from './shared-state.js';
 import { getLibrary, saveToLibrary } from './library-manager.js';
 import {
@@ -157,11 +158,32 @@ export function normalizeLegacySketch(nodes, edges) {
     // --- id coercion ---
     node.id = String(node.id);
 
+    // --- measurement history sanitation ---
+    sanitizeMeasurements(node);
+
     // --- gnssFixQuality migration ---
+    // Before nulling survey fields, preserve the full shot (including surveyZ,
+    // which has no manual_z counterpart and was previously lost outright) into
+    // the append-only measurement history.
+    const preserveMigratedShot = () => {
+      appendMeasurement(node, {
+        source: node.measure_source || 'legacy',
+        easting: node.surveyX,
+        northing: node.surveyY,
+        elevation: Number(node.surveyZ) ? node.surveyZ : null,
+        precision: node.measure_precision,
+        fixQuality: node.gnssFixQuality,
+        hdop: node.gnssHdop,
+        measuredAt: node.measuredAt,
+        measuredBy: node.measuredBy,
+        note: 'fix-quality-migration',
+      });
+    };
     if (node.gnssFixQuality === undefined && node.surveyX != null && node.surveyY != null) {
       node.gnssFixQuality = 4;
     }
     if (node.gnssFixQuality === 6 && node.surveyX != null && node.surveyY != null) {
+      preserveMigratedShot();
       if (node.manual_x == null) node.manual_x = node.surveyX;
       if (node.manual_y == null) node.manual_y = node.surveyY;
       node.surveyX = null;
@@ -177,6 +199,7 @@ export function normalizeLegacySketch(nodes, edges) {
       node.surveyX != null &&
       node.surveyY != null
     ) {
+      preserveMigratedShot();
       if (node.manual_x == null) node.manual_x = node.surveyX;
       if (node.manual_y == null) node.manual_y = node.surveyY;
       node.surveyX = null;
@@ -312,7 +335,14 @@ export function saveToStorage() {
     };
     
     const payloadJson = JSON.stringify(payload);
-    localStorage.setItem(STORAGE_KEYS.sketch, payloadJson);
+    try {
+      localStorage.setItem(STORAGE_KEYS.sketch, payloadJson);
+    } catch (err) {
+      // QuotaExceededError must not abort the rest of doSave — localStorage is
+      // the synchronous mirror; IndexedDB and cloud sync below are the durable
+      // copies and must still run.
+      console.warn('[Storage] localStorage sketch save failed:', err?.message);
+    }
     idbSaveCurrentCompat(payload);
     
     if (S.autosaveEnabled) {

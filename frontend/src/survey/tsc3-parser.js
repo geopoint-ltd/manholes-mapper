@@ -41,7 +41,7 @@ export function detectFormat(val1, val2) {
 /**
  * Parse a single survey data line into a point object.
  * @param {string} line - A single trimmed line of text
- * @returns {{ pointName: string, easting: number, northing: number, elevation: number }|null}
+ * @returns {{ pointName: string, easting: number, northing: number, elevation: number, raw: string }|null}
  */
 export function parseSurveyLine(line) {
   if (!line || typeof line !== 'string') return null;
@@ -89,6 +89,9 @@ export function parseSurveyLine(line) {
     easting,
     northing,
     elevation: isNaN(num3) ? 0 : num3,
+    // Original device line — preserved into the node's measurement history
+    // so the full wire data survives even if parsing conventions change.
+    raw: trimmed,
   };
 }
 

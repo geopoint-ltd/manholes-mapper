@@ -31,6 +31,10 @@ import {
   saveCoordinatesToStorage,
 } from '../utils/coordinates.js';
 import {
+  appendMeasurement,
+  backfillMeasurementFromNode,
+} from '../utils/measurement-history.js';
+import {
   EDGE_TYPES,
 } from '../state/constants.js';
 import { S, F } from './shared-state.js';
@@ -179,6 +183,8 @@ function handleGnssPointCapture(captureData) {
   // Mark the node as having coordinates
   const node = S.nodes.find(n => String(n.id) === String(targetNodeId));
   if (node) {
+    // Preserve the pre-history shot before this capture overwrites it
+    backfillMeasurementFromNode(node);
     node.hasCoordinates = true;
     node._hidden = false;
     node.surveyX = captureData.itm.x;
@@ -187,11 +193,27 @@ function handleGnssPointCapture(captureData) {
     if (captureData.position.alt) node.tl = captureData.position.alt;
     node.gnssFixQuality = captureData.position.fixQuality;
     node.gnssHdop = captureData.position.hdop;
-    node.measure_precision = captureData.position.accuracy || null;
+    node.measure_precision = captureData.position.hrms ?? captureData.position.accuracy ?? null;
+    node.measure_source = 'gnss';
     // Measurement metadata
     node.measuredAt = captureData.capturedAt || Date.now();
     const authUser = window.authGuard?.getAuthState?.()?.user;
     node.measuredBy = authUser?.name || authUser?.email || null;
+
+    // Append-only history: every capture is kept, re-measures included
+    appendMeasurement(node, {
+      source: 'gnss',
+      easting: captureData.itm.x,
+      northing: captureData.itm.y,
+      elevation: captureData.position.alt || null,
+      precision: node.measure_precision,
+      precisionV: captureData.position.vrms ?? null,
+      fixQuality: captureData.position.fixQuality,
+      hdop: captureData.position.hdop,
+      satellites: captureData.position.satellites,
+      measuredAt: node.measuredAt,
+      measuredBy: node.measuredBy,
+    });
   }
 
   // Create edge if requested
@@ -324,10 +346,26 @@ function createNodeFromMeasurement(result) {
   node.gnssFixQuality = position.fixQuality;
   node.gnssHdop = position.hdop;
   node.measure_precision = position.hrms || position.accuracy || null;
+  node.measure_source = 'gnss';
   // Measurement metadata
   node.measuredAt = Date.now();
   const qcAuthUser = window.authGuard?.getAuthState?.()?.user;
   node.measuredBy = qcAuthUser?.name || qcAuthUser?.email || null;
+
+  // Append-only history: quick captures are field measurements too
+  appendMeasurement(node, {
+    source: 'gnss',
+    easting: itm.x,
+    northing: itm.y,
+    elevation: position.alt || null,
+    precision: node.measure_precision,
+    precisionV: position.vrms ?? null,
+    fixQuality: position.fixQuality,
+    hdop: position.hdop,
+    satellites: position.satellites,
+    measuredAt: node.measuredAt,
+    measuredBy: node.measuredBy,
+  });
   S.coordinatesMap.set(String(node.id), {
     x: itm.x,
     y: itm.y,

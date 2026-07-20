@@ -25,6 +25,10 @@ import {
   getMeasurementBoundsItm,
 } from '../utils/coordinates.js';
 import {
+  appendMeasurement,
+  backfillMeasurementFromNode,
+} from '../utils/measurement-history.js';
+import {
   getMapReferencePoint,
   setMapReferencePoint,
   setMapLayerEnabled,
@@ -149,6 +153,32 @@ async function handleCoordinatesImport(file) {
         S.coordinatesMap = newCoordinates;
       }
       saveCoordinatesToStorage(S.coordinatesMap);
+
+      // Record the import as a measurement event on every node whose
+      // coordinates actually change — tagged 'import' so TSC3/GNSS shots stay
+      // distinguishable in the persisted history.
+      const importAuthUser = window.authGuard?.getAuthState?.()?.user;
+      const importedBy = importAuthUser?.name || importAuthUser?.email || null;
+      const importedAt = Date.now();
+      for (const node of S.nodes) {
+        const c = newCoordinates.get(String(node.id));
+        if (!c) continue;
+        const changed =
+          node.surveyX !== c.x ||
+          node.surveyY !== c.y ||
+          (Number(node.surveyZ) || null) !== (Number(c.z) || null);
+        if (!changed) continue;
+        backfillMeasurementFromNode(node);
+        node.measure_source = 'import';
+        appendMeasurement(node, {
+          source: 'import',
+          easting: c.x,
+          northing: c.y,
+          elevation: Number(c.z) ? c.z : null,
+          measuredAt: importedAt,
+          measuredBy: importedBy,
+        });
+      }
 
       // Create a reference layer showing all coordinate survey points with labels
       addCoordinatesReferenceLayer(S.coordinatesMap);

@@ -18,6 +18,7 @@ import { openDevicePickerDialog } from '../survey/device-picker-dialog.js';
 import { initSketchSidePanel } from '../project/sketch-side-panel.js';
 import { menuEvents } from '../menu/menu-events.js';
 import { saveCoordinatesToStorage } from '../utils/coordinates.js';
+import { appendMeasurement, backfillMeasurementFromNode } from '../utils/measurement-history.js';
 import { STORAGE_KEYS } from '../state/persistence.js';
 import { notifyStepperOfExternalNodeUpdate, setPendingConnectSuggestion, getPendingConnectSuggestion } from '../field-stepper/field-stepper.js';
 import { suggestChainConnection } from '../features/connection-suggest.js';
@@ -54,6 +55,10 @@ export function handleTSC3PointReceived(pointName, coords, isNew, nodeType) {
     node.manual_y = node.surveyY;
   }
 
+  // Nodes measured before the history feature existed: reconstruct their
+  // current shot as the first history entry so this re-measure doesn't erase it.
+  backfillMeasurementFromNode(node);
+
   // Store survey coordinates on the node (TSC3 = RTK Fixed)
   node.hasCoordinates = true;
   node._hidden = false;
@@ -64,12 +69,26 @@ export function handleTSC3PointReceived(pointName, coords, isNew, nodeType) {
   // The parser coerces a missing elevation to 0 — writing tl=0 would silently
   // suppress missing_tl detection, so only store real elevations.
   if (Number(coords.elevation)) node.tl = coords.elevation;
-  node.measure_precision = 0.02; // TSC3 RTK default precision (meters)
+  node.measure_precision = 0.02; // TSC3 RTK nominal precision (meters) — the wire format carries no accuracy column
   node.gnssFixQuality = 4; // TSC3 delivers RTK Fixed coordinates
+  node.measure_source = 'tsc3';
   // Measurement metadata
   node.measuredAt = Date.now();
   const tscAuthUser = window.authGuard?.getAuthState?.()?.user;
   node.measuredBy = tscAuthUser?.name || tscAuthUser?.email || null;
+
+  // Append-only history: every field shot is kept, re-measures included.
+  appendMeasurement(node, {
+    source: 'tsc3',
+    easting: coords.easting,
+    northing: coords.northing,
+    elevation: Number(coords.elevation) ? coords.elevation : null,
+    precision: 0.02,
+    fixQuality: 4,
+    measuredAt: node.measuredAt,
+    measuredBy: node.measuredBy,
+    raw: coords.raw || null,
+  });
 
   // Update coordinatesMap
   S.coordinatesMap.set(String(pointName), {

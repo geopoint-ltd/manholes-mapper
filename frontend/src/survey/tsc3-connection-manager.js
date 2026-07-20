@@ -92,6 +92,7 @@ class TSC3ConnectionManager {
       easting: point.easting,
       northing: point.northing,
       elevation: point.elevation,
+      raw: point.raw || null,
     };
 
     if (match) {

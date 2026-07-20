@@ -18,6 +18,7 @@ import {
   drainSyncQueue,
   removeSyncQueueItem,
 } from '../db.js';
+import { mergeMeasurementHistories } from '../utils/measurement-history.js';
 
 // Retry configuration for exponential backoff
 const RETRY_CONFIG = {
@@ -1132,9 +1133,12 @@ export async function syncSketchToCloud(sketch) {
           if (!comparison.hasConflict) {
             // Only metadata differs — auto-merge: take server nodes/edges, keep local metadata
             console.debug(`[Sync] Conflict is metadata-only for sketch ${sketch.id} — auto-merging.`);
+            // Union measurement histories into the retry payload — otherwise
+            // locally recorded field shots (invisible to compareSketchData)
+            // would be silently dropped from the push.
             result = await updateSketchInCloud(sketch.id, {
               ...putPayload,
-              nodes: serverSketch.nodes,
+              nodes: mergeMeasurementHistories(putPayload.nodes || [], serverSketch.nodes || []),
               edges: serverSketch.edges,
               clientVersion: serverVersion != null ? serverVersion : null,
             });
@@ -1154,10 +1158,12 @@ export async function syncSketchToCloud(sketch) {
 
             saveConflictBackup(sketch.id, putPayload, sketch.name || sketch.id);
 
-            // Accept the server version into local storage
+            // Accept the server version into local storage — but first union the
+            // append-only measurement histories so field shots recorded locally
+            // survive the server-wins resolution (they sync up on the next edit).
             const serverData = {
               ...sketch,
-              nodes: serverSketch.nodes || [],
+              nodes: mergeMeasurementHistories(putPayload.nodes || [], serverSketch.nodes || []),
               edges: serverSketch.edges || [],
               adminConfig: serverSketch.adminConfig || sketch.adminConfig || {},
               updatedAt: serverSketch.updatedAt,
@@ -1476,9 +1482,11 @@ export async function processSyncQueue() {
                 if (!comparison.hasConflict) {
                   // Metadata-only — auto-merge
                   console.debug(`[Sync] Queue conflict is metadata-only for ${op.data.id} — auto-merging.`);
+                  // Same history union as the direct path — queued offline
+                  // shots must survive the auto-merge.
                   queueResult = await updateSketchInCloud(op.data.id, {
                     ...queuePayload,
-                    nodes: serverSketch.nodes,
+                    nodes: mergeMeasurementHistories(queuePayload.nodes || [], serverSketch.nodes || []),
                     edges: serverSketch.edges,
                     clientVersion: serverVersion != null ? serverVersion : null,
                   });
@@ -1487,9 +1495,12 @@ export async function processSyncQueue() {
                   console.warn(`[Sync] Structural queue conflict for ${op.data.id}. Accepting server version.`);
                   saveConflictBackup(op.data.id, queuePayload, op.data.name || op.data.id);
 
+                  // Server wins structurally, but locally recorded measurement
+                  // histories (offline field shots) are unioned in — mirroring
+                  // the direct-path structural resolution above.
                   await saveSketchToIdb({
                     ...op.data,
-                    nodes: serverSketch.nodes || [],
+                    nodes: mergeMeasurementHistories(queuePayload.nodes || [], serverSketch.nodes || []),
                     edges: serverSketch.edges || [],
                     adminConfig: serverSketch.adminConfig || op.data.adminConfig || {},
                     updatedAt: serverSketch.updatedAt,
