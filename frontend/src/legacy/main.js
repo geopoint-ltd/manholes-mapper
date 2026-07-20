@@ -145,7 +145,6 @@ import { showProjectLoadingOverlay, updateLoadingStep, hideProjectLoadingOverlay
 import { SpatialGrid, buildNodeGrid, buildEdgeGrid } from '../utils/spatial-grid.js';
 import { renderCache } from '../utils/render-cache.js';
 import { renderPerf } from '../utils/render-perf.js';
-import { progressiveRenderer } from '../utils/progressive-renderer.js';
 import { S, F, bridgedProperty, hydrateStore } from './shared-state.js';
 import { bus } from '../state/event-bus.js';
 import { initGnssHandlers, setLiveMeasureMode, syncLiveMeasureToggleUI, updateLocationStatus, openGnssPointCaptureDialog, handleGnssPointCapture, vibrateForFixQuality, gpsQuickCapture, createNodeFromMeasurement, getNextEdgeId, centerOnGpsLocation, centerNewSketchOnUserLocation, toggleUserLocationTracking, updateGpsQuickCaptureBtn } from './gnss-handlers.js';

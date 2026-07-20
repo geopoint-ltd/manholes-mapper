@@ -92,7 +92,6 @@ function syncEdgeChainChip(showing) {
     el.style.display = 'none';
   }
 }
-import { progressiveRenderer } from '../utils/progressive-renderer.js';
 import { drawReferenceLayers } from '../map/reference-layers.js';
 import { drawBackgroundSketches, drawMergeModeOverlay } from '../project/project-canvas-renderer.js';
 import { drawIssueHighlight } from '../project/issue-highlight.js';
@@ -109,6 +108,137 @@ let _perfDrawFrameCount = 0;
 // ── Module-local mutable state (throttle flags, caches) ─────
 let _edgeLegendDirty = false;
 let _incompleteEdgeDirty = false;
+
+// ── Level of detail ──────────────────────────────────────────
+// Above these visible-element counts the per-element detailed path (icons,
+// badges, labels, per-edge stroke state) costs more than the frame budget on a
+// TSC5. Beyond them the detail is sub-pixel anyway, so we batch everything into
+// one path per colour. Everything visible still gets drawn — LOD trades detail
+// for completeness, unlike the time-sliced renderer it replaced, which restarted
+// from index 0 every frame and so never drew past its first budget slice.
+const LOD_NODE_THRESHOLD = 600;
+const LOD_EDGE_THRESHOLD = 800;
+// Past this many node labels the text is an unreadable smudge and fillText
+// dominates the frame. Labels come back as soon as the user zooms in.
+const LABEL_MAX_DRAWN = 300;
+/** Frozen stand-in so LOD frames never allocate a label array. */
+const EMPTY_LABELS = Object.freeze([]);
+/** Max node radius in screen px while in LOD — see drawNodesLod. */
+const LOD_MAX_SCREEN_RADIUS = 4;
+
+/**
+ * Batched simplified node rendering: one arc path per fill colour.
+ * @returns {number} nodes drawn
+ */
+function drawNodesLod(ctx, visibleNodes, radius, viewStretchX, viewStretchY, sizeVS) {
+  // Under autoSize a node keeps a constant ~18px screen footprint at every zoom,
+  // so an overview of 10k nodes overdraws the screen many times over and reads as
+  // one solid mass. Capping the screen radius at LOD both cuts the fill cost and
+  // makes the network's shape visible again.
+  const screenRadius = radius * sizeVS;
+  if (screenRadius > LOD_MAX_SCREEN_RADIUS) radius = LOD_MAX_SCREEN_RADIUS / sizeVS;
+  const _isHeatmapFrame = S._isHeatmapFrame;
+  const _issueNodeIds = S._issueNodeIds;
+  /** @type {Map<string, number[]>} colour → flat [x,y,...] */
+  const buckets = new Map();
+  let drawn = 0;
+
+  for (let i = 0; i < visibleNodes.length; i++) {
+    const node = visibleNodes[i];
+    if (node._hidden) continue;
+    const nodeType = node.nodeType;
+    let color;
+    if (_isHeatmapFrame && nodeType !== 'Home' && nodeType !== 'Issue' &&
+        nodeType !== 'ForLater' && nodeType !== 'למדידה מאוחרת') {
+      if (_issueNodeIds.has(String(node.id)) || node.surveyX == null || node.surveyY == null) {
+        color = '#ef4444';
+      } else if (!node.material || !node.coverDiameter || !node.access) {
+        color = '#f59e0b';
+      } else {
+        color = '#22c55e';
+      }
+    } else if (nodeType === 'Drainage' || nodeType === 'קולטן') {
+      color = COLORS.node.fillDrainageComplete || '#0ea5e9';
+    } else if (nodeType === 'Home' || nodeType === 'בית') {
+      color = COLORS.node.houseBody || '#d7ccc8';
+    } else if (nodeType === 'Issue') {
+      color = '#ef4444';
+    } else {
+      color = COLORS.node.fillDefault;
+    }
+    let pts = buckets.get(color);
+    if (!pts) { pts = []; buckets.set(color, pts); }
+    pts.push(node.x * viewStretchX, node.y * viewStretchY);
+    drawn++;
+  }
+
+  ctx.save();
+  ctx.strokeStyle = COLORS.node.stroke;
+  ctx.lineWidth = 1 / sizeVS;
+  const TWO_PI = Math.PI * 2;
+  for (const [color, pts] of buckets) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    for (let i = 0; i < pts.length; i += 2) {
+      ctx.moveTo(pts[i] + radius, pts[i + 1]);
+      ctx.arc(pts[i], pts[i + 1], radius, 0, TWO_PI);
+    }
+    ctx.fill();
+    ctx.stroke();
+  }
+  ctx.restore();
+  return drawn;
+}
+
+/**
+ * Batched simplified edge rendering: one line path per stroke colour,
+ * no arrowheads, fall icons, or measurement labels.
+ * @returns {number} edges drawn
+ */
+function drawEdgesLod(ctx, visibleEdges, nodeMap, viewStretchX, viewStretchY, sizeVS) {
+  const _isHeatmapFrame = S._isHeatmapFrame;
+  /** @type {Map<string, number[]>} colour → flat [x1,y1,x2,y2,...] */
+  const buckets = new Map();
+  let drawn = 0;
+
+  for (let i = 0; i < visibleEdges.length; i++) {
+    const edge = visibleEdges[i];
+    const tn = edge.tail != null ? nodeMap.get(String(edge.tail)) : null;
+    const hn = edge.head != null ? nodeMap.get(String(edge.head)) : null;
+    if (!tn || !hn) continue;               // dangling edges are rare — skipped at LOD zoom
+    if (tn._hidden || hn._hidden) continue;
+
+    let color;
+    if (_isHeatmapFrame) {
+      const hasBoth = edge.tail_measurement && String(edge.tail_measurement).trim() !== '' &&
+                      edge.head_measurement && String(edge.head_measurement).trim() !== '';
+      color = hasBoth ? '#3b82f6' : '#9ca3af';
+    } else {
+      color = F.diameterToColor(edge.line_diameter) || EDGE_TYPE_COLORS?.[edge.edge_type] || '#555';
+    }
+    let segs = buckets.get(color);
+    if (!segs) { segs = []; buckets.set(color, segs); }
+    segs.push(
+      tn.x * viewStretchX, tn.y * viewStretchY,
+      hn.x * viewStretchX, hn.y * viewStretchY
+    );
+    drawn++;
+  }
+
+  ctx.save();
+  ctx.lineWidth = (2 * S._contrastMul) / sizeVS;
+  for (const [color, segs] of buckets) {
+    ctx.strokeStyle = color;
+    ctx.beginPath();
+    for (let i = 0; i < segs.length; i += 4) {
+      ctx.moveTo(segs[i], segs[i + 1]);
+      ctx.lineTo(segs[i + 2], segs[i + 3]);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+  return drawn;
+}
 
 // ============================================
 // Main draw loop
@@ -260,27 +390,9 @@ function draw() {
     ? _edgeGrid.queryArray(visMinX, visMinY, visMaxX, visMaxY)
     : edges;
   let _edgesDrawn = 0;
-  const _useProgressiveEdges = _visibleEdges.length > 500;
-  if (_useProgressiveEdges) {
-    const viewCenterX = (visMinX + visMaxX) / 2;
-    const viewCenterY = (visMinY + visMaxY) / 2;
-    progressiveRenderer.begin(_visibleEdges, viewCenterX, viewCenterY, (edge) => {
-      const tn = edge.tail != null ? nodeMap.get(String(edge.tail)) : null;
-      const hn = edge.head != null ? nodeMap.get(String(edge.head)) : null;
-      if (tn && hn) return { x: (tn.x + hn.x) * 0.5 * viewStretchX, y: (tn.y + hn.y) * 0.5 * viewStretchY };
-      return { x: 0, y: 0 };
-    });
-    while (progressiveRenderer.hasMore()) {
-      const edge = progressiveRenderer.next();
-      const tn = edge.tail != null ? nodeMap.get(String(edge.tail)) : null;
-      const hn = edge.head != null ? nodeMap.get(String(edge.head)) : null;
-      if ((tn && tn._hidden) || (hn && hn._hidden)) continue;
-      drawEdge(edge);
-      _edgesDrawn++;
-      if (progressiveRenderer.overBudget()) break;
-    }
-    progressiveRenderer.finish();
-    if (!progressiveRenderer.isComplete) scheduleDraw();
+  const _lodEdges = _visibleEdges.length > LOD_EDGE_THRESHOLD;
+  if (_lodEdges) {
+    _edgesDrawn = drawEdgesLod(ctx, _visibleEdges, nodeMap, viewStretchX, viewStretchY, sizeVS);
   } else {
     for (let i = 0; i < _visibleEdges.length; i++) {
       const edge = _visibleEdges[i];
@@ -469,28 +581,11 @@ function draw() {
     : nodes;
   let _nodesDrawn = 0;
 
-  // For very large visible node sets, use progressive rendering to stay in frame budget
-  const _useProgressiveNodes = _visibleNodes.length > 500;
-  if (_useProgressiveNodes) {
-    const viewCenterX = (visMinX + visMaxX) / 2;
-    const viewCenterY = (visMinY + visMaxY) / 2;
-    progressiveRenderer.begin(_visibleNodes, viewCenterX, viewCenterY, (node) => ({
-      x: node.x * viewStretchX,
-      y: node.y * viewStretchY,
-    }));
-    while (progressiveRenderer.hasMore()) {
-      const node = progressiveRenderer.next();
-      if (node._hidden) continue;
-      const label = drawNode(node);
-      if (label) labelData.push(label);
-      const sx = node.x * viewStretchX;
-      const sy = node.y * viewStretchY;
-      nodeData.push({ x: sx, y: sy, radius: nodeRadius });
-      _nodesDrawn++;
-      if (progressiveRenderer.overBudget()) break;
-    }
-    progressiveRenderer.finish();
-    if (!progressiveRenderer.isComplete) scheduleDraw();
+  // Above the LOD threshold, draw every visible node as a batched plain circle:
+  // icons and labels are illegible at that zoom and cost far more than the frame budget.
+  const _lodNodes = _visibleNodes.length > LOD_NODE_THRESHOLD;
+  if (_lodNodes) {
+    _nodesDrawn = drawNodesLod(ctx, _visibleNodes, nodeRadius, viewStretchX, viewStretchY, sizeVS);
   } else {
     for (let i = 0; i < _visibleNodes.length; i++) {
       const node = _visibleNodes[i];
@@ -517,10 +612,13 @@ function draw() {
   renderPerf.record('totalNodes', nodes.length);
   renderPerf.record('totalEdges', edges.length);
 
-  // Edge label data cache
+  // Edge label data cache. At LOD zoom the labels are never drawn, so skip the
+  // O(E) rebuild entirely rather than building a cache nothing reads.
   let _edgeLabelDataCache = S._edgeLabelDataCache;
   const _quantizedSizeVS = Math.round(sizeVS * 100) / 100;
-  if (
+  if (_lodEdges) {
+    _edgeLabelDataCache = _edgeLabelDataCache || [];
+  } else if (
     _edgeLabelDataCache === null ||
     S._edgeLabelCacheStretchX !== viewStretchX ||
     S._edgeLabelCacheStretchY !== viewStretchY ||
@@ -589,12 +687,17 @@ function draw() {
     });
     S._edgeLabelDataCache = _edgeLabelDataCache;
   }
-  const edgeLabelData = _edgeLabelDataCache;
+  // At LOD zoom no edge label is drawn, so the collision pass must not see the
+  // cache a previous zoomed-in frame left behind — it would measureText() every
+  // entry (~13k on a 10k-node sketch) to avoid collisions with invisible text.
+  const edgeLabelData = _lodEdges ? EMPTY_LABELS : _edgeLabelDataCache;
 
   // Process labels
   const LABEL_COLLISION_THRESHOLD = 120;
   let positionedLabels;
-  if (labelData.length <= LABEL_COLLISION_THRESHOLD) {
+  if (labelData.length === 0 && edgeLabelData.length === 0) {
+    positionedLabels = EMPTY_LABELS;
+  } else if (labelData.length <= LABEL_COLLISION_THRESHOLD) {
     positionedLabels = processLabels(ctx, labelData, nodeData, edgeLabelData);
   } else {
     positionedLabels = labelData.map(l => ({
@@ -612,8 +715,11 @@ function draw() {
     ? positionedLabels[0].fontSize * viewScale
     : 16;
   // 9px floor: below that Hebrew/digit labels render as unreadable smudge on the
-  // TSC5 — better to draw nothing until the user zooms in.
-  if (effectiveFontPx >= 9 && positionedLabels.length > 0) {
+  // TSC5 — better to draw nothing until the user zooms in. Under autoSize the
+  // glyph size is pinned to screen pixels, so that floor can never trigger and
+  // the visible-count gate below is the only thing keeping dense views legible.
+  if (effectiveFontPx >= 9 && positionedLabels.length > 0 &&
+      positionedLabels.length <= LABEL_MAX_DRAWN) {
     const useHalo = mapLayerEnabled && getMapReferencePoint();
     ctx.save();
     ctx.fillStyle = COLORS.node.label;
@@ -645,7 +751,7 @@ function draw() {
   // Draw edge measurement labels
   {
     const _elf = Math.round(14 * sizeScale / sizeVS) * viewScale;
-    if (viewScale >= 0.3 && _elf >= 9) {
+    if (!_lodEdges && viewScale >= 0.3 && _elf >= 9) {
       const _edgeLabelSource = _useGridCull
         ? _visibleEdges
         : edges;

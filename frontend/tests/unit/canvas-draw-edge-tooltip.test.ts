@@ -79,10 +79,6 @@ vi.mock('../../src/utils/render-perf.js', () => ({
   renderPerf: { frameStart: vi.fn(), frameEnd: vi.fn(), record: vi.fn() },
 }));
 
-vi.mock('../../src/utils/progressive-renderer.js', () => ({
-  progressiveRenderer: { begin: vi.fn(), hasMore: vi.fn(() => false), next: vi.fn(), overBudget: vi.fn(() => false), finish: vi.fn(), isComplete: true },
-}));
-
 vi.mock('../../src/map/reference-layers.js', () => ({
   drawReferenceLayers: vi.fn(),
 }));

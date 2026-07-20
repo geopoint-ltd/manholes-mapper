@@ -16,6 +16,7 @@ export function getDarkModePreference() {
  */
 export function setDarkModePreference(pref) {
   localStorage.setItem('dark_mode_preference', pref);
+  invalidateThemeCache();
   applyDarkMode();
 }
 
@@ -23,14 +24,25 @@ export function setDarkModePreference(pref) {
  * Apply the dark mode preference to the document.
  */
 export function applyDarkMode() {
+  invalidateThemeCache();
   const dark = isDarkMode();
   document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
 }
 
-/**
- * Detect if dark mode is active based on preference.
- */
-export function isDarkMode() {
+// Resolving the theme reads localStorage and runs a matchMedia query. The COLORS
+// proxy below resolves it on *every* property access, so an uncached lookup cost
+// one storage read + one media query per node, per edge, per frame — tens of
+// thousands per frame on a large network. The answer only changes on an explicit
+// preference change, an OS theme switch, or an 'auto' hour boundary, so cache it
+// and invalidate on exactly those three events.
+let _darkCache = null;
+
+/** Drop the memoized theme so the next read re-resolves it. */
+export function invalidateThemeCache() {
+  _darkCache = null;
+}
+
+function computeDarkMode() {
   const pref = getDarkModePreference();
   switch (pref) {
     case 'light': return false;
@@ -41,7 +53,32 @@ export function isDarkMode() {
     }
     case 'system':
     default:
-      return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  }
+}
+
+/**
+ * Detect if dark mode is active based on preference (memoized).
+ */
+export function isDarkMode() {
+  if (_darkCache === null) _darkCache = computeDarkMode();
+  return _darkCache;
+}
+
+if (typeof window !== 'undefined') {
+  // OS-level theme switch (only observable under the 'system' preference).
+  if (window.matchMedia) {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const onChange = () => { invalidateThemeCache(); };
+    if (mq.addEventListener) mq.addEventListener('change', onChange);
+    else if (mq.addListener) mq.addListener(onChange);
+  }
+  // 'auto' is time-based, so nothing fires at the 06:00/19:00 boundary — re-check
+  // once a minute, which is precise enough for an hour-granularity switch.
+  const themeTimer = setInterval(invalidateThemeCache, 60000);
+  // Under jsdom/Node the timer is a handle that would keep a test runner alive.
+  if (themeTimer && typeof themeTimer === 'object' && typeof themeTimer.unref === 'function') {
+    themeTimer.unref();
   }
 }
 
