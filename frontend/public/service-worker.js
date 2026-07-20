@@ -38,7 +38,7 @@
 // higher→lower with undo snackbar), CONNECT screen for flat/missing-Z/far
 // shots, F.reverseEdge + edgeReverse undo, edge.direction_source provenance,
 // Home laterals locked Home→main, chain pointer skips Home nodes.
-const APP_VERSION = 'v144';
+const APP_VERSION = 'v145';
 const PRECACHE = 'graph-sketch-shell-' + APP_VERSION;
 const RUNTIME = 'graph-sketch-runtime-' + APP_VERSION;
 
