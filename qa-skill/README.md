@@ -63,12 +63,6 @@ Create `.env.local` with:
 POSTGRES_URL=postgresql://user:password@host:5432/database
 ```
 
-Or use the test database:
-
-```bash
-docker-compose -f docker-compose.test.yml up -d
-```
-
 ### For E2E Tests
 
 Playwright browsers are installed automatically on first run:
