@@ -337,7 +337,12 @@ function handleConfirm() {
       fixQuality: position.fixQuality,
       fixLabel: position.fixLabel,
       hdop: position.hdop,
-      satellites: position.satellites
+      satellites: position.satellites,
+      // Precision estimates — without these the captured node's
+      // measure_precision is silently null (fixed 2026-07)
+      accuracy: position.accuracy ?? null,
+      hrms: position.hrms ?? null,
+      vrms: position.vrms ?? null
     },
     itm: wgs84ToItm(position.lat, position.lon),
     createEdge: createEdge && gnssState.lastCapturedNodeId,

@@ -43,17 +43,19 @@ function createRailDOM() {
   headInput.placeholder = window.t?.('labels.headDepth') || 'Head';
   headInput.inputMode = 'decimal';
 
-  // Save on input change
+  // Save on input change — sanitized to digits + a single dot, matching the
+  // details-panel and field-stepper depth inputs (raw input.value from a
+  // type=number field can be '' for partially invalid buffers).
   tailInput.addEventListener('input', () => {
     if (!currentEdge) return;
-    currentEdge.tail_measurement = tailInput.value;
+    currentEdge.tail_measurement = sanitizeDepthValue(tailInput.value);
     if (typeof window.__scheduleDraw === 'function') window.__scheduleDraw();
     saveEdgeQuietly();
   });
 
   headInput.addEventListener('input', () => {
     if (!currentEdge) return;
-    currentEdge.head_measurement = headInput.value;
+    currentEdge.head_measurement = sanitizeDepthValue(headInput.value);
     if (typeof window.__scheduleDraw === 'function') window.__scheduleDraw();
     saveEdgeQuietly();
   });
@@ -67,6 +69,19 @@ function createRailDOM() {
   } else {
     document.body.appendChild(railEl);
   }
+}
+
+/**
+ * Keep only digits and a single decimal point (same rule as the other depth
+ * entry UIs in details-panel.js and field-stepper.js).
+ */
+function sanitizeDepthValue(value) {
+  let s = String(value ?? '').replace(/[^\d.]/g, '');
+  const firstDot = s.indexOf('.');
+  if (firstDot !== -1) {
+    s = s.slice(0, firstDot + 1) + s.slice(firstDot + 1).replace(/\./g, '');
+  }
+  return s;
 }
 
 function saveEdgeQuietly() {
@@ -118,8 +133,8 @@ function positionInputs() {
 export function showMeasurementRail(edge) {
   if (!railEl) createRailDOM();
   currentEdge = edge;
-  tailInput.value = edge.tail_measurement || '';
-  headInput.value = edge.head_measurement || '';
+  tailInput.value = edge.tail_measurement ?? '';
+  headInput.value = edge.head_measurement ?? '';
   railEl.style.display = '';
   positionInputs();
   scheduleUpdate();

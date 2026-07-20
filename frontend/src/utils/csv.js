@@ -181,9 +181,9 @@ export function exportEdgesCsv(edges, adminConfig, _t) {
     const row = [];
     if (include.from_node) row.push(csvQuote(e.tail || ''));
     if (include.to_node) row.push(csvQuote(e.head || '')); // head can be null for dangling edges
-    if (include.tail_measurement) row.push(csvQuote(e.tail_measurement || ''));
-    if (include.head_measurement) row.push(csvQuote(e.head_measurement || ''));
-    if (include.fall_depth) row.push(csvQuote(e.fall_depth || ''));
+    if (include.tail_measurement) row.push(csvQuote(e.tail_measurement ?? ''));
+    if (include.head_measurement) row.push(csvQuote(e.head_measurement ?? ''));
+    if (include.fall_depth) row.push(csvQuote(e.fall_depth ?? ''));
     if (include.fall_position) row.push(csvQuote(codeFor('edges', 'fall_position', e.fall_position, adminConfig)));
     if (include.line_diameter) row.push(csvQuote(codeFor('edges', 'line_diameter', e.line_diameter, adminConfig)));
     if (include.note) row.push(csvQuote(e.note || ''));

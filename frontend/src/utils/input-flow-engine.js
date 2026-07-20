@@ -149,11 +149,11 @@ export function applyActions(entity, ruleResults, defaults = {}) {
     } else if (field === 'line_diameter') {
       modified.line_diameter = '';
     } else if (field === 'fall_depth') {
-      modified.fallDepth = '';
+      modified.fall_depth = '';
     } else if (field === 'engineering_status') {
       modified.engineeringStatus = 0;
     } else if (field === 'notes') {
-      modified.notes = '';
+      modified.note = '';
     } else {
       // Generic nullification
       modified[field] = null;
@@ -177,17 +177,17 @@ export function applyActions(entity, ruleResults, defaults = {}) {
       } else if (field === 'line_diameter') {
         modified.line_diameter = value;
       } else if (field === 'fall_depth') {
-        modified.fallDepth = value;
+        modified.fall_depth = value;
       } else if (field === 'engineering_status') {
         modified.engineeringStatus = value;
       } else if (field === 'edge_type') {
-        modified.edgeType = value;
+        modified.edge_type = value;
       } else if (field === 'tail_measurement') {
-        modified.tailMeasurement = value;
+        modified.tail_measurement = value;
       } else if (field === 'head_measurement') {
-        modified.headMeasurement = value;
+        modified.head_measurement = value;
       } else if (field === 'notes') {
-        modified.notes = value;
+        modified.note = value;
       } else {
         // Generic assignment
         modified[field] = value;
@@ -284,14 +284,16 @@ export function normalizeEntityForRules(entity) {
     material: entity.material,
     access: entity.access,
     engineering_status: entity.engineeringStatus,
-    edge_type: entity.edgeType || entity.edge_type,
+    edge_type: entity.edge_type ?? entity.edgeType,
     line_diameter: entity.line_diameter,
-    fall_depth: entity.fallDepth,
-    tail_measurement: entity.tailMeasurement,
-    head_measurement: entity.headMeasurement,
-    notes: entity.notes,
+    fall_depth: entity.fall_depth ?? entity.fallDepth,
+    tail_measurement: entity.tail_measurement ?? entity.tailMeasurement,
+    head_measurement: entity.head_measurement ?? entity.headMeasurement,
     // Keep original properties too
-    ...entity
+    ...entity,
+    // After the spread: nodes store `note`, and a stale `notes` key left by the
+    // old buggy applyActions must not shadow the real value.
+    notes: entity.note ?? entity.notes,
   };
 }
 
