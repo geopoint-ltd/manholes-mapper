@@ -1,0 +1,22 @@
+# Dev tooling and local artifacts — never needed by the Vercel build.
+# The build needs: frontend/, api/, lib/, package.json, package-lock.json, vercel.json.
+android/
+service/
+scripts/
+docs/
+qa/
+qa-skill/
+data/
+image/
+companies/
+screenshots/
+test-artifacts/
+test-results/
+temp_images/
+app_state_*/
+current_app_design/
+.claude/
+.cursor/
+.github/
+.playwright-mcp/
+*.md
