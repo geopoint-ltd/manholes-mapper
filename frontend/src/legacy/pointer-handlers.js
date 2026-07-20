@@ -116,6 +116,8 @@ function _updateRefLayerTooltip(screenX, screenY, world) {
   }
 }
 let pendingDeselect = false;
+/** A node drag mutated coordinates that still need persisting on release. */
+let _nodeDragDirty = false;
 
 // ── Convenience aliases via F ───────────────────────────────────────────────
 const t = (...args) => F.t(...args);
@@ -165,37 +167,64 @@ export function findNodeAtWithExpansion(x, y, extraRadius) {
   return null;
 }
 
+/**
+ * The id → node index used by the draw loop, rebuilt here if a mutation has
+ * invalidated it. Hit-testing runs before the next frame, so it cannot assume
+ * draw() has already refreshed the map.
+ */
+function freshNodeMap() {
+  const map = S.nodeMap;
+  if (S._nodeMapDirty) {
+    map.clear();
+    const nodes = S.nodes;
+    for (let i = 0; i < nodes.length; i++) map.set(String(nodes[i].id), nodes[i]);
+    S._nodeMapDirty = false;
+    // Mirrors draw(): a changed node set also invalidates the issue overlay.
+    S._issueSetsDirty = true;
+  }
+  return map;
+}
+
 export function findEdgeAt(x, y, threshold) {
   let closest = null;
   const rawThreshold = (typeof threshold === 'number') ? threshold : 8;
   const sv = S.autoSizeEnabled ? S.viewScale : 1;
   let minDist = rawThreshold / sv;
-  const nodes = S.nodes;
-  S.edges.forEach((edge) => {
+  // Endpoint lookup was nodes.find() per edge — a full scan of every node for
+  // every edge, ~100M comparisons on a 10k network, on every tap.
+  const nodeMap = freshNodeMap();
+  const edges = S.edges;
+  for (let i = 0; i < edges.length; i++) {
+    const edge = edges[i];
     let tailX, tailY, headX, headY;
     if (edge.head === null && edge.tail != null) {
-      const tailNode = nodes.find((n) => n.id === edge.tail);
-      if (!tailNode || !edge.danglingEndpoint) return;
+      const tailNode = nodeMap.get(String(edge.tail));
+      if (!tailNode || !edge.danglingEndpoint) continue;
       tailX = tailNode.x; tailY = tailNode.y;
       headX = edge.danglingEndpoint.x; headY = edge.danglingEndpoint.y;
     } else if (edge.tail === null && edge.head != null) {
-      const headNode = nodes.find((n) => n.id === edge.head);
-      if (!headNode || !edge.tailPosition) return;
+      const headNode = nodeMap.get(String(edge.head));
+      if (!headNode || !edge.tailPosition) continue;
       tailX = edge.tailPosition.x; tailY = edge.tailPosition.y;
       headX = headNode.x; headY = headNode.y;
     } else {
-      const tailNode = nodes.find((n) => n.id === edge.tail);
-      const headNode = nodes.find((n) => n.id === edge.head);
-      if (!tailNode || !headNode) return;
+      const tailNode = edge.tail != null ? nodeMap.get(String(edge.tail)) : null;
+      const headNode = edge.head != null ? nodeMap.get(String(edge.head)) : null;
+      if (!tailNode || !headNode) continue;
       tailX = tailNode.x; tailY = tailNode.y;
       headX = headNode.x; headY = headNode.y;
     }
+    // Cheap AABB reject before the segment-distance maths.
+    if ((tailX < x - minDist && headX < x - minDist) ||
+        (tailX > x + minDist && headX > x + minDist) ||
+        (tailY < y - minDist && headY < y - minDist) ||
+        (tailY > y + minDist && headY > y + minDist)) continue;
     const dist = distanceToSegment(x, y, tailX, tailY, headX, headY);
     if (dist < minDist) {
       minDist = dist;
       closest = edge;
     }
-  });
+  }
   return closest;
 }
 
@@ -653,7 +682,10 @@ function pointerMove(x, y) {
       S.selectedNode.hasCoordinates = true;
     }
     F.updateNodeTimestamp(S.selectedNode);
-    F.saveToStorage();
+    // Persisting here ran a full-sketch JSON.stringify to localStorage, an
+    // IndexedDB clone and a cloud-sync enqueue on every pointer event — up to
+    // 120x a second while dragging. The drag is saved once, on release.
+    _nodeDragDirty = true;
     F.scheduleDraw();
     F.autoPanWhenDragging(x, y);
     return;
@@ -665,6 +697,10 @@ function pointerMove(x, y) {
 }
 
 function pointerUp() {
+  if (_nodeDragDirty) {
+    _nodeDragDirty = false;
+    F.saveToStorage();
+  }
   if (dragStartNodeState && S.selectedNode && String(S.selectedNode.id) === String(dragStartNodeState.id)) {
     const dx = S.selectedNode.x - dragStartNodeState.oldX;
     const dy = S.selectedNode.y - dragStartNodeState.oldY;

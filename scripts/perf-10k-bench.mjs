@@ -127,7 +127,23 @@ const result = await page.evaluate(async (data) => {
   await new Promise((r) => setTimeout(r, 1000));
   window.requestAnimationFrame = realRaf;
 
+  // Interaction costs: one tap's hit-test, and one full issue recompute.
+  const ph = await import('/src/legacy/pointer-handlers.js');
+  const si = await import('/src/project/sketch-issues.js');
+  const target = data.nodes[Math.floor(data.nodes.length / 2)];
+  const timeOf = (fn, reps) => {
+    fn();
+    const t = [];
+    for (let i = 0; i < reps; i++) { const a = performance.now(); fn(); t.push(performance.now() - a); }
+    t.sort((x, y) => x - y);
+    return +t[Math.floor(reps / 2)].toFixed(2);
+  };
+  const hitTestMs = timeOf(() => ph.findEdgeAt(target.x + 3, target.y + 3, 8), 21);
+  const nodeHitMs = timeOf(() => ph.findNodeAt(target.x, target.y), 21);
+  const issuesMs = timeOf(() => si.computeSketchIssues(data.nodes, data.edges), 5);
+
   return { injectMs: +injectMs.toFixed(1), overview, field, idleFramesIn1s: idleFrames,
+           hitTestMs, nodeHitMs, issuesMs,
            totalNodes: data.nodes.length, totalEdges: data.edges.length };
 }, sketch);
 
@@ -138,6 +154,10 @@ console.log(`\n  Network: ${result.totalNodes} nodes, ${result.totalEdges} edges
 console.log(`  Load into canvas: ${result.injectMs}ms\n`);
 console.log('  ' + fmt(result.overview));
 console.log('  ' + fmt(result.field));
+console.log(`\n  Interaction:`);
+console.log(`    findEdgeAt (one tap)   ${String(result.hitTestMs).padStart(7)}ms`);
+console.log(`    findNodeAt (one tap)   ${String(result.nodeHitMs).padStart(7)}ms`);
+console.log(`    computeSketchIssues    ${String(result.issuesMs).padStart(7)}ms`);
 console.log(`\n  rAF callbacks while idle (1s, after one scheduleDraw): ${result.idleFramesIn1s}  ${result.idleFramesIn1s <= 2 ? '(ok)' : '(RUNAWAY REDRAW LOOP)'}`);
 if (errors.length) {
   console.log('\n  Page errors:');
