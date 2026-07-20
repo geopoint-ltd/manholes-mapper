@@ -60,7 +60,9 @@ npx playwright test --project=chromium # Desktop only
 BASE_URL=http://localhost:5173 npx playwright test  # Custom base URL
 ```
 
-E2E config in `frontend/playwright.config.ts`. ~18 specs in `frontend/tests/e2e/` (auth, canvas-drawing, cockpit, full-network-audit, project-canvas, rtl-layout, tsc5-field-workflows, …). Runs `npm run dev` automatically via `webServer`. Projects: Desktop Chrome (Chromium) + Mobile Chrome (Pixel 5). Retries: 2 on CI, 0 locally. Screenshots/video on failure.
+E2E config in `frontend/playwright.config.ts`. ~18 specs in `frontend/tests/e2e/` (auth, canvas-drawing, cockpit, full-network-audit, project-canvas, rtl-layout, tsc5-field-workflows, …). `webServer` starts **both** `npm run dev` and `npm run mock:tsc3` — the survey-bridge specs self-skip when nothing is listening on 8765, and a skip reads as green, so the mock is not optional. Retries: 2 on CI, 0 locally. Screenshots/video on failure.
+
+**Projects:** Desktop Chrome (Chromium), Mobile Chrome (Pixel 5), and **TSC5** — the Trimble field device: 640×360 CSS landscape at DPR 2, `isMobile` + `hasTouch`. `tsc5-field-workflows.spec.ts` runs only under the TSC5 project (`npx playwright test --project=TSC5`); any spec can be run under it to check a change at real field geometry.
 
 ### QA Expert Workflow (`qa-skill/`)
 

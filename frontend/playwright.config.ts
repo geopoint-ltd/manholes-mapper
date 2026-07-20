@@ -63,15 +63,40 @@ export default defineConfig({
       name: 'Mobile Chrome',
       use: { ...devices['Pixel 5'] },
     },
+
+    /* Trimble TSC5 — the primary field device. 5" 1280x720 panel at DPR 2 =
+       640x360 CSS px, landscape, touch-only, no hardware keyboard. Every spec
+       should be runnable under the geometry the surveyors actually hold. */
+    {
+      name: 'TSC5',
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 640, height: 360 },
+        deviceScaleFactor: 2,
+        isMobile: true,
+        hasTouch: true,
+      },
+    },
   ],
 
-  /* Run your local dev server before starting the tests */
-  webServer: {
-    command: 'cd .. && npm run dev',
-    url: 'http://localhost:5173',
-    reuseExistingServer: !process.env.CI,
-    timeout: 120 * 1000,
-  },
+  /* Services started before the tests.
+     The mock TSC3 receiver is NOT optional: the survey-bridge specs self-skip
+     when nothing is listening on 8765, and a skip reads as green — which is
+     how the TSC3 path can rot unnoticed. */
+  webServer: [
+    {
+      command: 'cd .. && npm run dev',
+      url: 'http://localhost:5173',
+      reuseExistingServer: !process.env.CI,
+      timeout: 120 * 1000,
+    },
+    {
+      command: 'cd .. && npm run mock:tsc3',
+      url: 'http://localhost:3001/api/status',
+      reuseExistingServer: !process.env.CI,
+      timeout: 30 * 1000,
+    },
+  ],
   
   /* Global timeout for each test */
   timeout: 60 * 1000,

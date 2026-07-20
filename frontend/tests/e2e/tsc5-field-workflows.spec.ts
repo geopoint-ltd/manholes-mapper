@@ -21,17 +21,17 @@ import { test, expect, type Page } from '@playwright/test';
 import { mockAuthUser, gotoCanvasReady, dismissHomePanel } from './helpers';
 import * as fs from 'fs';
 
-test.use({
-  viewport: { width: 640, height: 360 },
-  hasTouch: true,
-  contextOptions: { reducedMotion: 'reduce' },
-});
+test.use({ contextOptions: { reducedMotion: 'reduce' } });
 test.describe.configure({ timeout: 180_000 });
 
-// TSC5-geometry spec: it brings its own 640x360 touch context on the desktop
-// chromium project. Under the Pixel-5 emulation project the isMobile/DPR
-// device emulation skews coordinate math without adding coverage.
-test.skip(({ isMobile }) => isMobile, 'runs on the desktop chromium project with its own TSC5 touch context');
+// The TSC5 geometry (640x360 @ DPR2, touch, no keyboard) now comes from the
+// dedicated `TSC5` project in playwright.config.ts rather than a per-file
+// test.use override, so every other spec can opt into the same field device.
+// Running this one anywhere else would either lose that geometry (desktop) or
+// swap in Pixel-5 portrait emulation (Mobile Chrome).
+test.beforeEach(() => {
+  test.skip(test.info().project.name !== 'TSC5', 'field-geometry spec — runs on the TSC5 project');
+});
 
 // ── Metrics collector ────────────────────────────────────────────────────────
 const findings: Record<string, any> = {};
@@ -41,7 +41,12 @@ function record(key: string, value: any) {
 }
 
 test.afterAll(async () => {
-  fs.writeFileSync('test-results/tsc5-scenario-findings.json', JSON.stringify(findings, null, 2));
+  // `findings` is module scope, so it holds only the tests this worker ran.
+  // Under fullyParallel every worker used to write the same path and the last
+  // one to finish won — most of the findings silently vanished. One file per
+  // worker keeps them all.
+  const idx = test.info().parallelIndex;
+  fs.writeFileSync(`test-results/tsc5-scenario-findings-${idx}.json`, JSON.stringify(findings, null, 2));
 });
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -106,10 +111,13 @@ async function nodeScreenPos(page: Page, id: string) {
     const vs = (window as any).getViewState?.();
     const canvas = document.getElementById('graphCanvas') as HTMLCanvasElement;
     const rect = canvas.getBoundingClientRect();
-    const dpr = canvas.width / rect.width;
-    // screen(css) = (world*viewScale*stretch + viewTranslate)/dpr + rect.origin
-    const sx = (n.x * vs.viewScale * vs.viewStretchX + vs.viewTranslate.x) / dpr + rect.left;
-    const sy = (n.y * vs.viewScale * vs.viewStretchY + vs.viewTranslate.y) / dpr + rect.top;
+    // viewTranslate is already in CSS px — resizeCanvas() does ctx.scale(dpr,dpr)
+    // so draw coordinates are logical, and screenToWorld() inverts against
+    // e.offsetX/Y directly. No DPR term belongs here; dividing by one made every
+    // computed position half-right at DPR 2 and the taps missed their nodes.
+    // screen(css) = world*viewScale*stretch + viewTranslate + rect.origin
+    const sx = n.x * vs.viewScale * vs.viewStretchX + vs.viewTranslate.x + rect.left;
+    const sy = n.y * vs.viewScale * vs.viewStretchY + vs.viewTranslate.y + rect.top;
     return { sx, sy };
   }, id);
 }
@@ -122,7 +130,31 @@ async function sidebarState(page: Page) {
   }));
 }
 
+/** Snapshot of the full-screen field stepper (field-stepper/field-stepper.js). */
+async function stepperState(page: Page) {
+  return page.evaluate(() => {
+    const el = document.getElementById('fieldStepperOverlay');
+    return {
+      open: !!el?.classList.contains('open'),
+      idLabel: el?.querySelector('.field-stepper-id')?.textContent?.trim() ?? '',
+      typeLabel: el?.querySelector('.field-stepper-type-label')?.textContent?.trim() ?? '',
+    };
+  });
+}
+
+/** Dismiss the stepper via its close button, counting the tap it costs. */
+async function closeStepper(page: Page) {
+  await tapEl(page, '#fieldStepperOverlay .field-stepper-close');
+  await expect(page.locator('#fieldStepperOverlay.open')).toHaveCount(0);
+}
+
 // ═════════════════════════════════════════════════════════════════════════════
+// Placement model: since the field-stepper redesign (pointer-handlers.js:468,
+// "close the create-edit gap") tapping empty canvas in node mode creates the
+// node AND opens the full-screen stepper on it — create == edit. Laying out a
+// run of manholes therefore costs 1 tap to place + 1 tap to dismiss per node.
+// The budgets below pin that cost: they are the regression gate on "seamless",
+// so a redesign that changes them has to change them deliberately.
 test('scenario A: survey 3 new manholes + 2 pipes (tap count + wizard cost)', async ({ page }) => {
   await setup(page);
   const { cx, cy } = await canvasCenter(page);
@@ -130,29 +162,49 @@ test('scenario A: survey 3 new manholes + 2 pipes (tap count + wizard cost)', as
 
   // Place 3 manholes spread horizontally (default mode is node)
   const pts = [ { x: cx - 200, y: cy - 30 }, { x: cx - 40, y: cy - 30 }, { x: cx + 120, y: cy - 30 } ];
-  for (const p of pts) await tap(page, p.x, p.y);
+  const placement: any[] = [];
+  for (const p of pts) {
+    await tap(page, p.x, p.y);
+    const st = await stepperState(page);
+    placement.push(st);
+    expect(st.open, 'placing a manhole opens the field stepper on it (create == edit)').toBe(true);
+    // must be dismissed before the next manhole can be tapped in — otherwise
+    // the overlay swallows the tap and the placement is silently lost
+    await closeStepper(page);
+  }
+  record('A.placementScreens', placement);
   let s = await sketch(page);
-  record('A.nodesAfter3Taps', { taps: tapCount, nodes: s.nodes.length });
-  expect(s.nodes.length).toBe(3);
+  record('A.nodesAfter3Placements', { taps: tapCount, nodes: s.nodes.length, tapsPerManhole: tapCount / 3 });
+  expect(s.nodes.length, 'each tap on empty canvas places exactly one manhole').toBe(3);
+  expect(tapCount, '3 manholes = 3 place taps + 3 stepper dismissals').toBe(6);
   const [idA, idB, idC] = s.nodes.map(n => n.id);
 
-  // Did placing open any editor? (map says: no — create≠edit)
+  // Where placement leaves the UI once the stepper is dismissed
   record('A.detailsAfterPlacement', await sidebarState(page));
 
-  // Switch to edge mode + connect A-B, B-C
+  // Switch to edge mode + connect A-B, B-C.
+  // Positions are re-read immediately before every tap: selecting a node can
+  // auto-pan the view (the "node must not hide behind the sidebar" fix), which
+  // silently invalidates any coordinate captured earlier. A surveyor taps what
+  // is on screen *now*; so does this test.
   await tapEl(page, '#utEdgeBtn');
-  const posA = await nodeScreenPos(page, idA); const posB = await nodeScreenPos(page, idB); const posC = await nodeScreenPos(page, idC);
-  await tap(page, posA!.sx, posA!.sy);
-  await tap(page, posB!.sx, posB!.sy);
+  const tapNode = async (id: string) => {
+    const p = await nodeScreenPos(page, id);
+    if (!p) throw new Error(`node ${id} has no screen position`);
+    await tap(page, p.sx, p.sy);
+  };
+  await tapNode(idA);
+  await tapNode(idB);
   // Chaining: B stays armed as the next tail, so C completes the second edge
-  await tap(page, posC!.sx, posC!.sy);
+  await tapNode(idC);
   s = await sketch(page);
   const chainWorked = s.edges.length === 2;
-  record('A.chainAfterBC', { edges: s.edges.length, chainWorked });
+  record('A.chainAfterBC', { edges: s.edges.length, chainWorked, edgeList: s.edges });
   expect(chainWorked, 'edge chaining: head stays armed as next tail (A,B,C → 2 edges)').toBe(true);
   record('A.totalTapsFor3Nodes2Pipes', { taps: tapCount, nodes: s.nodes.length, edges: s.edges.length });
   expect(s.edges.length).toBe(2);
-  expect(tapCount, '3 nodes + 2 pipes in 7 taps (was 9 pre-chaining)').toBe(7);
+  // 6 placement (3 place + 3 dismiss) + 1 mode switch + 3 chained edge taps
+  expect(tapCount, '3 manholes + 2 pipes in 10 taps').toBe(10);
 
   // The chain is still armed on C — the on-screen cancel chip must be
   // visible (keyboard-less TSC5 has no Escape) and must end the chain
@@ -229,11 +281,12 @@ test('scenario A: survey 3 new manholes + 2 pipes (tap count + wizard cost)', as
     const d = (window as any).__getActiveSketchData?.();
     const vs = (window as any).getViewState?.();
     const canvas = document.getElementById('graphCanvas') as HTMLCanvasElement;
-    const rect = canvas.getBoundingClientRect(); const dpr = canvas.width / rect.width;
+    const rect = canvas.getBoundingClientRect();
     return ids.map((nid: string) => {
       const n = d.nodes.find((n: any) => String(n.id) === String(nid));
-      const sx = (n.x * vs.viewScale * vs.viewStretchX + vs.viewTranslate.x) / dpr + rect.left;
-      const sy = (n.y * vs.viewScale * vs.viewStretchY + vs.viewTranslate.y) / dpr + rect.top;
+      // CSS-px view transform — see nodeScreenPos(); no DPR term belongs here
+      const sx = n.x * vs.viewScale * vs.viewStretchX + vs.viewTranslate.x + rect.left;
+      const sy = n.y * vs.viewScale * vs.viewStretchY + vs.viewTranslate.y + rect.top;
       const top = document.elementFromPoint(sx, sy);
       return { id: nid, coveredBy: top?.closest('#unifiedSidebar') ? 'sidebar' : (top?.id || top?.tagName || 'canvas') };
     });
@@ -280,11 +333,17 @@ test('mis-tap hazards: select-miss, edge-miss, drag jitter', async ({ page }) =>
     const before = (await sketch(page)).nodes.length;
     await tap(page, p1!.sx + missPx, p1!.sy + missPx);
     const after = (await sketch(page)).nodes.length;
+    // A miss that creates a node also throws the full-screen stepper over the
+    // sketch — that overlay, not the phantom node, is what actually costs the
+    // surveyor time, so record it alongside the node count.
+    const strayStepper = (await stepperState(page)).open;
     record(`H1.selectMissBy${missPx}px`, {
       result: after > before ? 'CREATED A NEW NODE (destructive miss)' : (await sidebarState(page)).open ? 'selected node (forgiving hit radius)' : 'nothing',
-      nodesBefore: before, nodesAfter: after,
+      nodesBefore: before, nodesAfter: after, openedStepper: strayStepper,
     });
-    // cleanup accidental node via undo
+    // cleanup: dismiss the stepper first — it is modal and would swallow every
+    // later probe in this test — then undo the accidental node
+    if (strayStepper) await closeStepper(page);
     if (after > before) { await page.evaluate(() => (document.getElementById('undoBtn') as HTMLElement)?.click()); await page.waitForTimeout(200); }
   }
 
@@ -566,4 +625,97 @@ test('scenario B: TSC3 — re-measure existing manhole + new point (live mock br
   if (dlgVisible) {
     expect(autoConnectedToLast, 'new survey point auto-connects to the last shot node').toBe(true);
   }
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Touch-target audit. Field crews work gloved on a 640x360 panel: a control
+// under the 44px WCAG 2.5.5 / Material minimum is a mis-tap generator, and one
+// sitting beneath the sidebar is unreachable whatever its size. Emulation
+// cannot tell us how sunlight or gloves feel, but it can tell us the geometry
+// is at least physically tappable.
+const MIN_TOUCH_PX = 44;
+
+/**
+ * Measure every visible interactive control inside `sel`.
+ *
+ * `offscreen` (scrolled out of its own scroll container, or outside the
+ * viewport) is kept distinct from `reachable:false`. A chip below the fold of a
+ * scrolling list is fine — you scroll to it — but elementFromPoint at its
+ * centre reports whatever is painted there instead, which would otherwise look
+ * identical to a control genuinely buried under another element.
+ */
+async function auditTouchTargets(page: Page, sel: string) {
+  return page.evaluate((rootSel) => {
+    const root = document.querySelector(rootSel);
+    if (!root) return { present: false, controls: [] as any[] };
+    const scrollParent = (el: Element): Element | null => {
+      let p = el.parentElement;
+      while (p) {
+        const cs = getComputedStyle(p);
+        if (/(auto|scroll)/.test(cs.overflowY) || /(auto|scroll)/.test(cs.overflowX)) return p;
+        p = p.parentElement;
+      }
+      return null;
+    };
+    const q = 'button, select, [role="button"], a[href], input:not([type="hidden"])';
+    const controls = [...root.querySelectorAll(q)].flatMap((el) => {
+      const r = el.getBoundingClientRect();
+      const cs = getComputedStyle(el);
+      if (!r.width || !r.height || cs.visibility === 'hidden' || cs.opacity === '0') return [];
+      const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      const clip = scrollParent(el)?.getBoundingClientRect();
+      const offscreen =
+        cx < 0 || cy < 0 || cx > window.innerWidth || cy > window.innerHeight ||
+        (!!clip && (cy < clip.top || cy > clip.bottom || cx < clip.left || cx > clip.right));
+      const top = offscreen ? null : document.elementFromPoint(cx, cy);
+      const hit = offscreen ? null : !!top && (top === el || el.contains(top) || top.contains(el));
+      return [{
+        id: el.id || String((el as HTMLElement).className || '').split(' ')[0] || el.tagName,
+        w: Math.round(r.width),
+        h: Math.round(r.height),
+        offscreen,
+        reachable: hit,
+        occludedBy: hit === false ? (top?.id || String((top as HTMLElement)?.className || '') || top?.tagName || 'nothing') : null,
+      }];
+    });
+    return { present: true, controls };
+  }, sel);
+}
+
+test('touch targets: field controls are >=44px and unoccluded at 640x360', async ({ page }) => {
+  await setup(page);
+
+  const toolbar = await auditTouchTargets(page, '#unifiedToolbar');
+  record('T.toolbar', toolbar);
+  expect(toolbar.present, '#unifiedToolbar rendered at TSC5 geometry').toBe(true);
+  expect(toolbar.controls.length, 'toolbar exposes controls').toBeGreaterThan(0);
+
+  const undersized = toolbar.controls.filter((c) => c.w < MIN_TOUCH_PX || c.h < MIN_TOUCH_PX);
+  // `reachable === false` only — null means offscreen/scrolled, which is not a defect
+  const unreachable = toolbar.controls.filter((c) => c.reachable === false);
+  record('T.toolbarUndersized', undersized);
+  record('T.toolbarUnreachable', unreachable);
+  expect(undersized, `toolbar controls below ${MIN_TOUCH_PX}px: ${JSON.stringify(undersized)}`).toEqual([]);
+  expect(unreachable, `toolbar controls not on top at their own centre: ${JSON.stringify(unreachable)}`).toEqual([]);
+
+  // The stepper is the other surface a worker taps all day — measure it on a
+  // freshly placed manhole, where it opens by itself.
+  const { cx, cy } = await canvasCenter(page);
+  await tap(page, cx, cy);
+  await expect(page.locator('#fieldStepperOverlay.open')).toHaveCount(1);
+  const stepper = await auditTouchTargets(page, '#fieldStepperOverlay');
+  record('T.stepper', stepper);
+  const stepperUndersized = stepper.controls.filter((c) => c.w < MIN_TOUCH_PX || c.h < MIN_TOUCH_PX);
+  const stepperUnreachable = stepper.controls.filter((c) => c.reachable === false);
+  record('T.stepperUndersized', stepperUndersized);
+  record('T.stepperUnreachable', stepperUnreachable);
+  // Chips below the fold of the scrolling body are legitimate — but if the
+  // whole answer list is off-screen the worker has no way to know it is there.
+  const offscreen = stepper.controls.filter((c) => c.offscreen);
+  record('T.stepperOffscreen', { count: offscreen.length, total: stepper.controls.length });
+  expect(offscreen.length, 'at least some answer chips are on screen without scrolling')
+    .toBeLessThan(stepper.controls.length);
+  await page.screenshot({ path: 'test-results/tsc5-touch-targets.png' });
+  expect(stepperUndersized, `stepper controls below ${MIN_TOUCH_PX}px: ${JSON.stringify(stepperUndersized)}`).toEqual([]);
+  expect(stepperUnreachable, `stepper controls not on top at their own centre: ${JSON.stringify(stepperUnreachable)}`).toEqual([]);
 });
