@@ -17,6 +17,8 @@ import {
   enqueueSyncOperation,
   drainSyncQueue,
   removeSyncQueueItem,
+  updateSyncQueueItem,
+  countSyncQueue,
 } from '../db.js';
 import { mergeMeasurementHistories } from '../utils/measurement-history.js';
 
@@ -457,16 +459,15 @@ export function resetSyncHealth() {
  */
 export async function refreshQueueStatus() {
   try {
-    const operations = await drainSyncQueue();
-    // Re-enqueue drained items (non-destructive peek)
-    for (const op of operations) {
-      await enqueueSyncOperation(op);
-    }
+    // countSyncQueue is a pure O(1) count. (The previous implementation read
+    // every item with drainSyncQueue — which does NOT remove them — and then
+    // re-enqueued them all, DUPLICATING the entire queue on every call.)
+    const queueSize = await countSyncQueue();
     updateSyncState({
-      queueSize: operations.length,
-      pendingChanges: operations.length,
+      queueSize,
+      pendingChanges: queueSize,
     });
-    return operations.length;
+    return queueSize;
   } catch (err) {
     console.warn('[Sync] Failed to refresh queue status:', err);
     return syncState.queueSize;
@@ -1420,6 +1421,51 @@ export function resetApiAvailability() {
   console.debug('[Sync] API availability reset');
 }
 
+// A queued op that keeps failing must not be retried forever: hard 4xx
+// rejections (validation, forbidden, too large) can never succeed, and even
+// "transient" failures get a generous cap so one poisoned item doesn't churn
+// on every reconnect for the life of the install. The sketch itself always
+// remains in local storage/IndexedDB — only the queued push is given up on,
+// and the unsent payload is preserved via saveConflictBackup.
+const PERMANENT_QUEUE_STATUS = new Set([400, 403, 404, 413, 422]);
+const MAX_QUEUE_ATTEMPTS = 12;
+
+async function handleQueueItemFailure(op, error) {
+  const status = error?.statusCode || null;
+
+  // Deleting something the server no longer has is success, not failure.
+  if (op.type === 'DELETE' && status === 404) {
+    try { await removeSyncQueueItem(op._queueKey); } catch (_) { /* ignore */ }
+    return;
+  }
+
+  const attempts = (op.attempts || 0) + 1;
+  const permanent = PERMANENT_QUEUE_STATUS.has(status) || attempts >= MAX_QUEUE_ATTEMPTS;
+
+  if (!permanent) {
+    // Persist the attempt counter so the cap survives page reloads.
+    try {
+      const { _queueKey, ...stored } = op;
+      await updateSyncQueueItem(_queueKey, { ...stored, attempts });
+    } catch (_) { /* non-fatal: item stays queued with the old counter */ }
+    return;
+  }
+
+  console.warn(`[Sync] Giving up on queued ${op.type} after ${attempts} attempts (status ${status ?? 'n/a'}).`);
+  if (op.type === 'UPDATE' && op.data) {
+    saveConflictBackup(op.data.id, op.data, op.data.name || op.data.id);
+    if (typeof window !== 'undefined' && typeof window.showToast === 'function') {
+      const displayName = op.data.name || op.data.id;
+      window.showToast(
+        typeof window.t === 'function'
+          ? window.t('auth.syncGaveUp', displayName)
+          : `Couldn't sync sketch '${displayName}' to the cloud. Your unsent changes were saved as a local backup.`
+      );
+    }
+  }
+  try { await removeSyncQueueItem(op._queueKey); } catch (_) { /* ignore */ }
+}
+
 /**
  * Process queued sync operations
  * Called when coming back online
@@ -1435,12 +1481,31 @@ export async function processSyncQueue() {
   // Filter out operations for legacy non-UUID sketch IDs — these would
   // cause 400 errors from the API. The sketches themselves are preserved
   // locally; we just remove their cloud sync requests from the queue.
-  const operations = [];
+  const validOperations = [];
   for (const op of allOperations) {
     const opSketchId = op.type === 'DELETE' ? op.sketchId : op.data?.id;
     if (opSketchId && !isValidCloudUUID(opSketchId)) {
       console.warn(`[Sync] Discarding queued ${op.type} for legacy sketch ID "${opSketchId}"`);
       // Remove legacy items from the queue so they don't accumulate
+      try { await removeSyncQueueItem(op._queueKey); } catch (e) { /* ignore */ }
+      continue;
+    }
+    validOperations.push(op);
+  }
+
+  // Coalesce UPDATEs: every offline edit enqueues a full-sketch snapshot, so
+  // N edits leave N snapshots of which only the newest matters. Keep the
+  // highest-keyed UPDATE per sketch and drop the superseded ones.
+  const newestUpdateKey = new Map();
+  for (const op of validOperations) {
+    if (op.type === 'UPDATE' && op.data?.id) {
+      const prev = newestUpdateKey.get(op.data.id);
+      if (prev === undefined || op._queueKey > prev) newestUpdateKey.set(op.data.id, op._queueKey);
+    }
+  }
+  const operations = [];
+  for (const op of validOperations) {
+    if (op.type === 'UPDATE' && op.data?.id && newestUpdateKey.get(op.data.id) !== op._queueKey) {
       try { await removeSyncQueueItem(op._queueKey); } catch (e) { /* ignore */ }
       continue;
     }
@@ -1581,7 +1646,7 @@ export async function processSyncQueue() {
         await removeSyncQueueItem(op._queueKey);
       } catch (error) {
         console.error('[Sync] Failed to process queued operation:', op, error);
-        // Leave the operation in the queue — it will be retried next sync cycle
+        await handleQueueItemFailure(op, error);
         failedCount++;
       }
     }

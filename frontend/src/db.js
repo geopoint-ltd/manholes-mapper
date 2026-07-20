@@ -196,9 +196,8 @@ export async function deleteSketch(id) {
 /**
  * Queue a sync operation for later processing. Accepts any plain object.
  *
- * Currently unused but implemented for future background sync support. The
- * service worker can consume this queue and attempt to POST the operations
- * when connectivity returns.
+ * Consumed by auth/sync-service.js: offline (or mid-sync) sketch updates and
+ * deletes are queued here and drained by processSyncQueue() on reconnect.
  *
  * @param {any} op
  * @returns {Promise<void>}
@@ -216,6 +215,24 @@ export async function enqueueSyncOperation(op) {
         .catch(() => { /* non-fatal: badge will refresh on next poll */ });
       resolve();
     };
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+/**
+ * Overwrite a queued sync operation in place, keeping its queue key.
+ * Used to persist per-item retry counters across sessions.
+ *
+ * @param {IDBValidKey} key  The auto-increment key (_queueKey) of the item.
+ * @param {any} op
+ * @returns {Promise<void>}
+ */
+export async function updateSyncQueueItem(key, op) {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('syncQueue', 'readwrite');
+    tx.objectStore('syncQueue').put(op, key);
+    tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
 }
