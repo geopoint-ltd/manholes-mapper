@@ -523,18 +523,23 @@ function centerSelectedNodeInVisibleCanvas(node) {
       else visRight = Math.min(visRight, window.innerWidth - w);
     }
     if (visRight - visLeft < 80) return; // no meaningful canvas visible
-    const dpr = canvas.width / rect.width;
-    const nodeScreenX = (node.x * S.viewScale * S.viewStretchX + S.viewTranslate.x) / dpr + rect.left;
+    // viewTranslate is in CSS pixels, not device pixels: resizeCanvas() calls
+    // ctx.scale(dpr, dpr) so every draw coordinate is logical, and
+    // screenToWorld() inverts against e.offsetX/Y directly. Scaling by DPR here
+    // was a no-op on a DPR-1 desktop but halved the computed node position on
+    // real field hardware (TSC5 and the Note 10 both run at DPR 2), which both
+    // defeated the "already visible" check and overshot the pan by ~2x.
+    const nodeScreenX = node.x * S.viewScale * S.viewStretchX + S.viewTranslate.x + rect.left;
     // Already comfortably visible? Leave the view alone.
     const margin = 30;
     if (nodeScreenX >= visLeft + margin && nodeScreenX <= visRight - margin) return;
     const targetX = (visLeft + visRight) / 2;
     const targetYCss = rect.top + rect.height / 2;
-    const nodeScreenY = (node.y * S.viewScale * S.viewStretchY + S.viewTranslate.y) / dpr + rect.top;
-    const tx = S.viewTranslate.x + (targetX - nodeScreenX) * dpr;
+    const nodeScreenY = node.y * S.viewScale * S.viewStretchY + S.viewTranslate.y + rect.top;
+    const tx = S.viewTranslate.x + (targetX - nodeScreenX);
     // Keep vertical position unless the node is off-canvas vertically
     const ty = (nodeScreenY < rect.top + margin || nodeScreenY > rect.bottom - margin)
-      ? S.viewTranslate.y + (targetYCss - nodeScreenY) * dpr
+      ? S.viewTranslate.y + (targetYCss - nodeScreenY)
       : S.viewTranslate.y;
     window.__setViewState?.(S.viewScale, tx, ty);
   } catch (_) { /* view pan is best-effort */ }
