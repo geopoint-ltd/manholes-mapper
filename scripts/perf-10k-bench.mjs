@@ -141,9 +141,20 @@ const result = await page.evaluate(async (data) => {
   const hitTestMs = timeOf(() => ph.findEdgeAt(target.x + 3, target.y + 3, 8), 21);
   const nodeHitMs = timeOf(() => ph.findNodeAt(target.x, target.y), 21);
   const issuesMs = timeOf(() => si.computeSketchIssues(data.nodes, data.edges), 5);
+  const nodeTypesMs = timeOf(() => cd.computeNodeTypes(), 15);
+
+  // The save path's serialization cost, which every edit pays.
+  const payload = { nodes: data.nodes, edges: data.edges, nextNodeId: 1, sketchId: 'x' };
+  let json = '';
+  const stringifyMs = timeOf(() => { json = JSON.stringify(payload); }, 5);
+  const jsonMB = +(json.length / 1048576).toFixed(2);
+  const lsWriteMs = timeOf(() => {
+    try { localStorage.setItem('__perfProbe', json); } catch (_) { /* quota */ }
+  }, 3);
+  try { localStorage.removeItem('__perfProbe'); } catch (_) { /* ignore */ }
 
   return { injectMs: +injectMs.toFixed(1), overview, field, idleFramesIn1s: idleFrames,
-           hitTestMs, nodeHitMs, issuesMs,
+           hitTestMs, nodeHitMs, issuesMs, nodeTypesMs, stringifyMs, jsonMB, lsWriteMs,
            totalNodes: data.nodes.length, totalEdges: data.edges.length };
 }, sketch);
 
@@ -158,6 +169,11 @@ console.log(`\n  Interaction:`);
 console.log(`    findEdgeAt (one tap)   ${String(result.hitTestMs).padStart(7)}ms`);
 console.log(`    findNodeAt (one tap)   ${String(result.nodeHitMs).padStart(7)}ms`);
 console.log(`    computeSketchIssues    ${String(result.issuesMs).padStart(7)}ms`);
+console.log(`    computeNodeTypes       ${String(result.nodeTypesMs).padStart(7)}ms   (per keystroke in a depth field)`);
+console.log(`
+  Save path (per edit):`);
+console.log(`    JSON.stringify sketch  ${String(result.stringifyMs).padStart(7)}ms   (${result.jsonMB} MB)`);
+console.log(`    localStorage.setItem   ${String(result.lsWriteMs).padStart(7)}ms`);
 console.log(`\n  rAF callbacks while idle (1s, after one scheduleDraw): ${result.idleFramesIn1s}  ${result.idleFramesIn1s <= 2 ? '(ok)' : '(RUNAWAY REDRAW LOOP)'}`);
 if (errors.length) {
   console.log('\n  Page errors:');

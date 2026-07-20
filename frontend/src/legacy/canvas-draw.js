@@ -933,11 +933,17 @@ function autoPanWhenDragging(screenX, screenY) {
 
 function computeNodeTypes() {
   const { nodes, edges } = S;
-  const nodeMap = new Map();
-  for (const node of nodes) {
-    node.type = 'type1';
-    nodeMap.set(String(node.id), node);
+  // Reuse the draw loop's id→node index (rebuilt here if a mutation left it
+  // stale) instead of allocating a second one. This runs on every keystroke in
+  // a measurement field, so a per-call 10k-entry Map build was pure overhead.
+  const nodeMap = S.nodeMap;
+  if (S._nodeMapDirty) {
+    nodeMap.clear();
+    for (let i = 0; i < nodes.length; i++) nodeMap.set(String(nodes[i].id), nodes[i]);
+    S._nodeMapDirty = false;
+    S._issueSetsDirty = true;
   }
+  for (let i = 0; i < nodes.length; i++) nodes[i].type = 'type1';
   for (const edge of edges) {
     if (String(edge.tail) === String(edge.head)) continue;
     const tailNode = nodeMap.get(String(edge.tail));
