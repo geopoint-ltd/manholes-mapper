@@ -189,17 +189,23 @@ export function compareSketchData(local, server) {
     };
   }
 
-  // Deep comparison of node key fields (id, x, y, surveyX, surveyY, type)
+  // Deep comparison of node key fields (id, canvas position, survey coords
+  // incl. Z, type, and measurement-history length — `measurements` is deleted
+  // when empty, so a missing array must compare equal to []).
   for (let i = 0; i < localNodes.length; i++) {
     const ln = localNodes[i];
     const sn = serverNodes[i];
+    const lnMeasurements = Array.isArray(ln.measurements) ? ln.measurements.length : 0;
+    const snMeasurements = Array.isArray(sn.measurements) ? sn.measurements.length : 0;
     if (
       ln.id !== sn.id ||
       ln.x !== sn.x ||
       ln.y !== sn.y ||
       ln.surveyX !== sn.surveyX ||
       ln.surveyY !== sn.surveyY ||
-      ln.type !== sn.type
+      ln.surveyZ !== sn.surveyZ ||
+      ln.type !== sn.type ||
+      lnMeasurements !== snMeasurements
     ) {
       return {
         hasConflict: true,
@@ -211,16 +217,22 @@ export function compareSketchData(local, server) {
     }
   }
 
-  // Deep comparison of edge key fields (id, from, to, length, type)
+  // Deep comparison of edge key fields. Field names must match the real edge
+  // shape created in legacy/graph-crud.js (tail/head/edge_type/…) — comparing
+  // fields that don't exist on edges makes every edge diff invisible.
   for (let i = 0; i < localEdges.length; i++) {
     const le = localEdges[i];
     const se = serverEdges[i];
     if (
       le.id !== se.id ||
-      le.from !== se.from ||
-      le.to !== se.to ||
-      le.length !== se.length ||
-      le.type !== se.type
+      le.tail !== se.tail ||
+      le.head !== se.head ||
+      le.edge_type !== se.edge_type ||
+      le.material !== se.material ||
+      le.line_diameter !== se.line_diameter ||
+      le.tail_measurement !== se.tail_measurement ||
+      le.head_measurement !== se.head_measurement ||
+      le.fall_depth !== se.fall_depth
     ) {
       return {
         hasConflict: true,

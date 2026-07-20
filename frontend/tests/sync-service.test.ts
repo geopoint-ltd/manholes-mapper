@@ -387,14 +387,28 @@ describe('Sync Service Unit Tests', () => {
   });
 
   describe('compareSketchData', () => {
+    // Real edge shape as created by legacy/graph-crud.js createEdge()
+    const makeEdge = (overrides: any = {}) => ({
+      id: 1,
+      tail: '1',
+      head: '2',
+      edge_type: 'gravity',
+      material: 'PVC',
+      line_diameter: '160',
+      tail_measurement: '1.20',
+      head_measurement: '1.45',
+      fall_depth: '',
+      ...overrides,
+    });
+
     it('should return hasConflict: false when nodes and edges are identical', () => {
       const local = {
         nodes: [{ id: 1, x: 100, y: 200, surveyX: 245000, surveyY: 740000, type: 'manhole' }],
-        edges: [{ id: 1, from: 1, to: 2, length: 10, type: 'pipe' }],
+        edges: [makeEdge()],
       };
       const server = {
         nodes: [{ id: 1, x: 100, y: 200, surveyX: 245000, surveyY: 740000, type: 'manhole' }],
-        edges: [{ id: 1, from: 1, to: 2, length: 10, type: 'pipe' }],
+        edges: [makeEdge()],
       };
       const result = compareSketchData(local, server);
       expect(result.hasConflict).toBe(false);
@@ -402,7 +416,7 @@ describe('Sync Service Unit Tests', () => {
 
     it('should return hasConflict: false when only metadata differs', () => {
       const nodes = [{ id: 1, x: 100, y: 200, type: 'manhole' }];
-      const edges = [{ id: 1, from: 1, to: 2, length: 5, type: 'pipe' }];
+      const edges = [makeEdge()];
       const local = { name: 'Local Name', nodes, edges };
       const server = { name: 'Server Name', nodes, edges };
       const result = compareSketchData(local, server);
@@ -426,7 +440,7 @@ describe('Sync Service Unit Tests', () => {
 
     it('should detect conflict when edge counts differ', () => {
       const local = { nodes: [], edges: [] };
-      const server = { nodes: [], edges: [{ id: 1, from: 1, to: 2, length: 5, type: 'pipe' }] };
+      const server = { nodes: [], edges: [makeEdge()] };
       const result = compareSketchData(local, server);
       expect(result.hasConflict).toBe(true);
       expect(result.localEdgeCount).toBe(0);
@@ -453,11 +467,69 @@ describe('Sync Service Unit Tests', () => {
       expect(result.hasConflict).toBe(true);
     });
 
-    it('should detect conflict when edge key fields differ', () => {
-      const local = { nodes: [], edges: [{ id: 1, from: 1, to: 2, length: 10, type: 'pipe' }] };
-      const server = { nodes: [], edges: [{ id: 1, from: 1, to: 3, length: 10, type: 'pipe' }] };
+    it('should detect conflict when an edge is rewired to a different node', () => {
+      // Regression: the classifier used to compare from/to/length/type, none of
+      // which exist on real edges, so this diff was invisible (undefined ===
+      // undefined) and edge-only conflicts were auto-merged with server edges.
+      const local = { nodes: [], edges: [makeEdge()] };
+      const server = { nodes: [], edges: [makeEdge({ head: '3' })] };
       const result = compareSketchData(local, server);
       expect(result.hasConflict).toBe(true);
+    });
+
+    it('should detect conflict when edge flow direction is reversed', () => {
+      const local = { nodes: [], edges: [makeEdge({ tail: '1', head: '2' })] };
+      const server = { nodes: [], edges: [makeEdge({ tail: '2', head: '1' })] };
+      const result = compareSketchData(local, server);
+      expect(result.hasConflict).toBe(true);
+    });
+
+    it('should detect conflict when edge attributes differ (type/material/diameter)', () => {
+      const base = { nodes: [], edges: [makeEdge()] };
+      for (const overrides of [
+        { edge_type: 'pressure' },
+        { material: 'concrete' },
+        { line_diameter: '200' },
+      ]) {
+        const result = compareSketchData(base, { nodes: [], edges: [makeEdge(overrides)] });
+        expect(result.hasConflict).toBe(true);
+      }
+    });
+
+    it('should detect conflict when edge invert measurements differ', () => {
+      const base = { nodes: [], edges: [makeEdge()] };
+      for (const overrides of [
+        { tail_measurement: '2.00' },
+        { head_measurement: '2.00' },
+        { fall_depth: '0.50' },
+      ]) {
+        const result = compareSketchData(base, { nodes: [], edges: [makeEdge(overrides)] });
+        expect(result.hasConflict).toBe(true);
+      }
+    });
+
+    it('should detect conflict when node surveyZ differs', () => {
+      const local = { nodes: [{ id: 1, x: 0, y: 0, surveyZ: 12.34 }], edges: [] };
+      const server = { nodes: [{ id: 1, x: 0, y: 0, surveyZ: 15.0 }], edges: [] };
+      const result = compareSketchData(local, server);
+      expect(result.hasConflict).toBe(true);
+    });
+
+    it('should detect conflict when node measurement history lengths differ', () => {
+      const local = {
+        nodes: [{ id: 1, x: 0, y: 0, measurements: [{ easting: 1, northing: 2 }] }],
+        edges: [],
+      };
+      const server = { nodes: [{ id: 1, x: 0, y: 0 }], edges: [] };
+      const result = compareSketchData(local, server);
+      expect(result.hasConflict).toBe(true);
+    });
+
+    it('should treat a missing measurements array as equal to an empty one', () => {
+      const local = { nodes: [{ id: 1, x: 0, y: 0, measurements: [] }], edges: [] };
+      const server = { nodes: [{ id: 1, x: 0, y: 0 }], edges: [] };
+      const result = compareSketchData(local, server);
+      expect(result.hasConflict).toBe(false);
     });
 
     it('should handle empty nodes/edges arrays', () => {
@@ -523,6 +595,61 @@ describe('Sync Service Unit Tests', () => {
       expect(backupKeys.length).toBeGreaterThanOrEqual(1);
 
       // Clean up
+      for (const k of backupKeys) window.localStorage.removeItem(k);
+      delete (window as any).showToast;
+    });
+
+    it('should treat an edge-only change as structural, not metadata-only', async () => {
+      // Regression: with the phantom from/to/length/type field names this
+      // conflict was classified as metadata-only and the auto-merge retry
+      // silently overwrote local edge changes with server edges.
+      const uuid = '12345678-1234-1234-1234-123456789bbb';
+      const nodes = [{ id: 1, x: 100, y: 200, type: 'manhole' }];
+      const localEdge = {
+        id: 1, tail: '1', head: '2', edge_type: 'gravity', material: 'PVC',
+        line_diameter: '160', tail_measurement: '1.20', head_measurement: '1.45', fall_depth: '',
+      };
+      const serverEdge = { ...localEdge, head: '3', tail_measurement: '2.00' };
+      const localSketch = { id: uuid, name: 'Edge Conflict', nodes, edges: [localEdge] };
+      const serverSketch = {
+        id: uuid,
+        name: 'Edge Conflict',
+        version: 7,
+        nodes,
+        edges: [serverEdge],
+        adminConfig: {},
+        updatedAt: '2026-07-01T00:00:00Z',
+      };
+
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: false,
+        status: 409,
+        headers: { get: () => 'application/json' },
+        json: async () => ({ error: 'Version conflict', currentSketch: serverSketch }),
+      });
+
+      window.showToast = vi.fn();
+
+      await syncSketchToCloud(localSketch);
+
+      // Structural path: no auto-merge retry, just the original PUT
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+
+      // Server version accepted locally
+      expect(db.saveSketch).toHaveBeenCalledWith(expect.objectContaining({
+        id: uuid,
+        edges: serverSketch.edges,
+      }));
+
+      // User notified + local changes backed up
+      expect(window.showToast).toHaveBeenCalledTimes(1);
+      const backupKeys = [];
+      for (let i = 0; i < window.localStorage.length; i++) {
+        const k = window.localStorage.key(i);
+        if (k && k.startsWith('conflict_backup_')) backupKeys.push(k);
+      }
+      expect(backupKeys.length).toBeGreaterThanOrEqual(1);
+
       for (const k of backupKeys) window.localStorage.removeItem(k);
       delete (window as any).showToast;
     });
