@@ -6,6 +6,8 @@
  * Delegates to existing button clicks for compatibility.
  */
 
+import { isRapidPlacement, toggleRapidPlacement } from '../state/placement-mode.js';
+
 import './unified-toolbar.css';
 
 let toolbarEl = null;
@@ -46,6 +48,12 @@ export function initUnifiedToolbar() {
       <button class="ut-btn" data-node-type="issue" title="${t('modeIssue') || 'Issue'}">
         <span class="material-icons">warning</span>
         <span class="ut-btn__label">${t('modeIssue') || 'Issue'}</span>
+      </button>
+      <button class="ut-btn ut-btn--toggle" id="utRapidPlaceBtn" data-rapid-place
+              title="${t('modeRapidPlaceHint') || 'Place without opening the form'}"
+              aria-pressed="false">
+        <span class="material-icons">bolt</span>
+        <span class="ut-btn__label">${t('modeRapidPlace') || 'Rapid'}</span>
       </button>
     </div>
 
@@ -204,6 +212,20 @@ function wireModeDelegation() {
 function wireFlyout() {
   if (!flyoutEl) return;
 
+  // Rapid placement toggle — lives in the flyout because that is already where
+  // "what happens when I tap the canvas" is chosen. Stays open on click so the
+  // worker can see the state flip before dismissing it.
+  syncRapidPlaceBtn();
+  flyoutEl.addEventListener('click', (e) => {
+    const rapidBtn = e.target.closest('[data-rapid-place]');
+    if (!rapidBtn) return;
+    e.stopPropagation();
+    const t = window.t || ((k) => k);
+    const on = toggleRapidPlacement();
+    syncRapidPlaceBtn();
+    window.showToast?.(on ? t('toasts.rapidPlacementOn') : t('toasts.rapidPlacementOff'), 2600);
+  });
+
   flyoutEl.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-node-type]');
     if (!btn) return;
@@ -234,6 +256,19 @@ function wireFlyout() {
       closeFlyout();
     }
   });
+}
+
+/** Reflect rapid-placement state on the flyout toggle and the node button. */
+function syncRapidPlaceBtn() {
+  const on = isRapidPlacement();
+  const btn = document.getElementById('utRapidPlaceBtn');
+  if (btn) {
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
+  // Badge the mode button too — the flyout is closed most of the time, and a
+  // worker must be able to see that taps are not opening the form.
+  document.getElementById('utNodeBtn')?.classList.toggle('ut-btn--rapid', on);
 }
 
 function toggleFlyout() {

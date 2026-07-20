@@ -196,6 +196,32 @@ body.unified-layout .unified-toolbar {
   min-width: 52px;
 }
 
+/* Rapid placement toggle — separated from the node-type choices above it,
+   because it changes what placing does rather than what gets placed. */
+.ut-flyout .ut-btn--toggle {
+  border-inline-start: 1px solid var(--color-border, #e2e8f0);
+  margin-inline-start: 4px;
+  padding-inline-start: 8px;
+}
+
+/* Rapid placement is a sticky mode with no full-screen form to announce it,
+   so the mode button carries a badge while it is on. */
+.ut-btn--rapid {
+  position: relative;
+}
+
+.ut-btn--rapid::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  inset-inline-end: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-accent, #2563eb);
+  box-shadow: 0 0 0 2px var(--color-surface, #fff);
+}
+
 /* ─── Mobile tweaks ─── */
 /* All 10 buttons must fit a 360px-wide portrait phone in a single row —
    the toolbar cannot scroll (overflow would clip the node-type flyout) */

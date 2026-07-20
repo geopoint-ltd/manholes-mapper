@@ -462,7 +462,8 @@
   }
 
   .field-stepper-current-value {
-    padding: 4px var(--space-2, 8px);
+    padding: 2px var(--space-2, 8px);
+    font-size: var(--text-xs, 0.75rem);
   }
 
   .field-stepper-body {
@@ -470,18 +471,33 @@
   }
 
   .field-stepper-field-header {
-    margin-bottom: var(--space-2, 8px);
+    margin-bottom: 4px;
     font-size: var(--text-sm, 0.875rem);
   }
 
+  /* 640x360 (TSC5) is the tightest screen we ship to, and the longest answer
+     list — maintenance status, 15 options — used to run ~34px past the fold,
+     hiding a whole row of chips behind the nav bar with no hint they existed.
+     These trims buy that row back. min-height stays at 44px on purpose: the
+     gloved-touch minimum is not negotiable, so the space comes from type size,
+     gaps and the explainer instead. */
   .field-stepper-chip {
     min-height: 44px;
-    padding: 6px var(--space-2, 8px);
+    padding: 4px 6px;
+    font-size: var(--text-xs, 0.75rem);
+    line-height: 1.2;
   }
 
   .field-stepper-chip-grid {
     grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
-    gap: 6px;
+    gap: 4px;
+  }
+
+  .field-stepper-explainer {
+    padding: 5px var(--space-2, 8px);
+    margin-bottom: 6px;
+    font-size: var(--text-xs, 0.75rem);
+    line-height: 1.25;
   }
 
   .field-stepper-textarea {

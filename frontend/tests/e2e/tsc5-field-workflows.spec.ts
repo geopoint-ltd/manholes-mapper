@@ -341,6 +341,12 @@ test('mis-tap hazards: select-miss, edge-miss, drag jitter', async ({ page }) =>
       result: after > before ? 'CREATED A NEW NODE (destructive miss)' : (await sidebarState(page)).open ? 'selected node (forgiving hit radius)' : 'nothing',
       nodesBefore: before, nodesAfter: after, openedStepper: strayStepper,
     });
+    // FIX VERIFICATION (create clearance): a near-miss must never mint a
+    // phantom manhole on top of the one the worker was reaching for, and must
+    // never bury the sketch under the stepper that creation opens.
+    expect(after, `mis-tap by ${missPx}px created a phantom node`).toBe(before);
+    expect(strayStepper, `mis-tap by ${missPx}px opened the stepper`).toBe(false);
+
     // cleanup: dismiss the stepper first — it is modal and would swallow every
     // later probe in this test — then undo the accidental node
     if (strayStepper) await closeStepper(page);
@@ -709,13 +715,42 @@ test('touch targets: field controls are >=44px and unoccluded at 640x360', async
   const stepperUnreachable = stepper.controls.filter((c) => c.reachable === false);
   record('T.stepperUndersized', stepperUndersized);
   record('T.stepperUnreachable', stepperUnreachable);
-  // Chips below the fold of the scrolling body are legitimate — but if the
-  // whole answer list is off-screen the worker has no way to know it is there.
   const offscreen = stepper.controls.filter((c) => c.offscreen);
   record('T.stepperOffscreen', { count: offscreen.length, total: stepper.controls.length });
-  expect(offscreen.length, 'at least some answer chips are on screen without scrolling')
-    .toBeLessThan(stepper.controls.length);
   await page.screenshot({ path: 'test-results/tsc5-touch-targets.png' });
   expect(stepperUndersized, `stepper controls below ${MIN_TOUCH_PX}px: ${JSON.stringify(stepperUndersized)}`).toEqual([]);
   expect(stepperUnreachable, `stepper controls not on top at their own centre: ${JSON.stringify(stepperUnreachable)}`).toEqual([]);
+  // The longest answer list we ship (maintenance status, 15 options) has to fit
+  // the 640x360 panel outright. It used to run ~34px past the fold, hiding a
+  // whole row of chips behind the nav bar with nothing to suggest they existed.
+  expect(offscreen, `answer chips below the fold: ${JSON.stringify(offscreen)}`).toEqual([]);
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+test('rapid placement: one tap per manhole, no stepper', async ({ page }) => {
+  await setup(page);
+  const { cx, cy } = await canvasCenter(page);
+
+  // Toggle it on the way a worker would: through the node-mode flyout
+  await tapEl(page, '#utNodeBtn');
+  await tapEl(page, '#utRapidPlaceBtn');
+  await expect(page.locator('#utRapidPlaceBtn')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#utNodeBtn'), 'mode button badges the sticky state').toHaveClass(/ut-btn--rapid/);
+  await page.locator('#utNodeBtn').tap(); // close the flyout
+  await page.waitForTimeout(250);
+
+  tapCount = 0;
+  const pts = [{ x: cx - 200, y: cy - 30 }, { x: cx - 40, y: cy - 30 }, { x: cx + 120, y: cy - 30 }];
+  for (const p of pts) {
+    await tap(page, p.x, p.y);
+    expect((await stepperState(page)).open, 'rapid placement must not open the stepper').toBe(false);
+  }
+  const s = await sketch(page);
+  record('R.rapidPlacement', { taps: tapCount, nodes: s.nodes.length, tapsPerManhole: tapCount / (s.nodes.length || 1) });
+  expect(s.nodes.length, 'three taps, three manholes').toBe(3);
+  expect(tapCount, 'rapid placement costs one tap per manhole').toBe(3);
+
+  // The choice must survive a reload — a surveyor who set it at the start of a
+  // run should not silently lose it to a refresh.
+  expect(await page.evaluate(() => localStorage.getItem('graphSketch.rapidPlacement'))).toBe('1');
 });

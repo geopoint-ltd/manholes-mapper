@@ -16,6 +16,7 @@ export const STORAGE_KEYS = {
   viewStretch: 'graphSketch.viewStretch.v1',
   tsc3WsAddress: 'graphSketch.tsc3.wsAddress',
   autoSize: 'graphSketch.autoSize',
+  rapidPlacement: 'graphSketch.rapidPlacement',
 };
 
 // In-memory copy of the IndexedDB current sketch for when localStorage cannot

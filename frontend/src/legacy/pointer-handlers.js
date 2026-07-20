@@ -14,6 +14,7 @@ import { distanceToSegment } from '../utils/geometry.js';
 import { NODE_RADIUS } from '../state/constants.js';
 import { commitIdInputIfFocused } from '../dom/dom-utils.js';
 import { openFieldStepper } from '../field-stepper/field-stepper.js';
+import { isRapidPlacement } from '../state/placement-mode.js';
 import { wizardIsRTKFixed } from './wizard-helpers.js';
 
 // ── Local constants ─────────────────────────────────────────────────────────
@@ -24,6 +25,14 @@ const MAX_SCALE = 5.0;
 const TOUCH_TAP_MOVE_THRESHOLD = 5;
 const TOUCH_SELECT_EXPANSION = 14;
 const TOUCH_EDGE_HIT_THRESHOLD = 14;
+// Creating a node demands more clearance than selecting one. A gloved tap that
+// lands outside the select ring but still near a manhole used to mint a
+// phantom node on top of the one the worker meant to open — and, since
+// creation opens the stepper, bury the sketch under a full-screen form too.
+// Inside this ring the tap is read as "you meant that node". To place one
+// genuinely this close, zoom in: the threshold is screen px, so zooming buys
+// world-space clearance.
+const TOUCH_CREATE_CLEARANCE = 28;
 const MOUSE_TAP_MOVE_THRESHOLD = 6;
 // Touch drags on a node that still carries a measurement must be deliberate:
 // below this screen-px travel the move is treated as glove jitter and ignored
@@ -465,14 +474,14 @@ function pointerDown(x, y) {
     S.selectedNode = created;
     S.selectedEdge = null;
     F.scheduleDraw();
-    openFieldStepper(created);
+    if (!isRapidPlacement()) openFieldStepper(created);
   } else if (S.currentMode === 'home') {
     const created = F.createNode(world.x, world.y);
     if (!created) return; // read-only sketch
     created.nodeType = 'Home';
     S.selectedNode = created;
     F.draw();
-    openFieldStepper(created);
+    if (!isRapidPlacement()) openFieldStepper(created);
   } else if (S.currentMode === 'drainage') {
     const created = F.createNode(world.x, world.y);
     if (!created) return; // read-only sketch
@@ -480,7 +489,7 @@ function pointerDown(x, y) {
     S.selectedNode = created;
     S.selectedEdge = null;
     F.scheduleDraw();
-    openFieldStepper(created);
+    if (!isRapidPlacement()) openFieldStepper(created);
   } else if (S.currentMode === 'issue') {
     const created = F.createNode(world.x, world.y);
     if (!created) return; // read-only sketch
@@ -1171,6 +1180,27 @@ export function initPointerHandlers() {
               if (S.selectedNode === nearNode) centerSelectedNodeInVisibleCanvas(nearNode);
             }, 60);
           } else if (!nearEdge) {
+            // Clearance guard: near-miss that would drop a phantom node right
+            // on top of an existing manhole selects it instead (see
+            // TOUCH_CREATE_CLEARANCE). Say so, or the worker just sees a tap
+            // that "did the wrong thing".
+            const crowding = findNodeAtWithExpansion(world.x, world.y, TOUCH_CREATE_CLEARANCE);
+            if (crowding) {
+              S.selectedNode = crowding;
+              S.selectedEdge = null;
+              S.__wizardActiveTab = null;
+              F.renderDetails();
+              F.scheduleDraw();
+              F.showToast(t('toasts.nodeTooCloseSelected'), 2600);
+              setTimeout(() => {
+                if (S.selectedNode === crowding) centerSelectedNodeInVisibleCanvas(crowding);
+              }, 60);
+              touchAddPending = false;
+              touchAddPoint = null;
+              touchPanCandidate = false;
+              pointerUp();
+              return;
+            }
             const created = F.createNode(world.x, world.y);
             if (S.currentMode === 'home' && created) {
               created.nodeType = 'Home';
@@ -1195,7 +1225,17 @@ export function initPointerHandlers() {
             if (created && S.currentMode !== 'issue') {
               S.selectedNode = created;
               S.selectedEdge = null;
-              openFieldStepper(created);
+              // Rapid placement trades the auto-opened stepper for one-tap
+              // placement while a run is being laid out. It must leave the
+              // canvas clear too: the details sidebar covers ~40% of a 640px
+              // screen, so opening it here would swallow the next placement
+              // tap. Only refresh it when it is already open (otherwise it
+              // would sit there showing the previous node).
+              if (!isRapidPlacement()) {
+                openFieldStepper(created);
+              } else if (!document.getElementById('unifiedSidebar')?.classList.contains('collapsed')) {
+                F.renderDetails();
+              }
             }
             F.scheduleDraw();
           }
