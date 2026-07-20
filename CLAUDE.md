@@ -246,7 +246,7 @@ Toggle via `body.classList.toggle('heatmap-active')`. When active, nodes are col
 
 ### Service Worker & Caching
 
-`frontend/public/service-worker.js` uses versioned caches keyed by `APP_VERSION` (check the current value at the top of the file). **Bump `APP_VERSION`** whenever service-worker.js, index.html, or `main.js` content changes — effectively after any frontend change phones must pick up immediately. `main.js` has a stable filename and is stale-while-revalidate cached, so without a bump users get the OLD main.js (pointing at old hashed chunks) on first load after deploy. Vite-built JS/CSS under `/assets/` are fingerprinted and cached automatically.
+`frontend/public/service-worker.js` uses versioned caches keyed by `APP_VERSION`. **The version is stamped automatically at build time** — `npm run build` runs `frontend/build-tools/stamp-sw-version.mjs`, which rewrites the `APP_VERSION` literal in `dist/service-worker.js` with the git commit hash (`VERCEL_GIT_COMMIT_SHA` on Vercel, `git rev-parse` locally). Every deploy therefore invalidates the shell cache; never hand-bump the literal in `public/service-worker.js` (it is only the dev-server fallback). `main.js` has a stable filename and is stale-while-revalidate cached; Vite-built JS/CSS under `/assets/` are fingerprinted and cached automatically.
 
 **Caching strategies:** Navigation → network-first (fallback `offline.html`). `/assets/*` → cache-first (fingerprinted). Google Fonts → cache-first. Other same-origin GET → stale-while-revalidate. `/api/*` → skip SW entirely.
 
@@ -313,7 +313,7 @@ Main reusable scripts (the many `_`-prefixed and `capture-*` scripts are one-off
 - **Old-account deploy path (prepared 2026-07-19):** `hussam0is/manholes-mapper` on GitHub is now a **fork** of `geopoint-ltd/manholes-mapper` (the original repo was transferred; the fork keeps the old name). Its `master` branch is force-pushed to the current app state and is the intended production branch for the old Vercel project. The old Vercel↔GitHub integration died in the transfer — to redeploy the old production, log into Vercel **with GitHub OAuth as `hussam0is`**, then reconnect the old project to the fork (Settings → Git, production branch `master`) or promote via CLI. Keep the legacy `manholes-mapper.vercel.app` domain in CORS/auth origin fallbacks (restored in commit 8733050) so logins keep working there.
 - **2026-07-19:** a second new-account Vercel project exists — team `dev-geopoint` (login `hussam-3537`), production `https://manholes-mapper-ten.vercel.app`, env vars configured but pointing at the **OLD** database, not git-connected. It is **NOT canonical**; created during credential recovery before the `gis-6579s-projects` setup was rediscovered. Pending user decision: retire it, or move the canonical deployment there (would need the NEW Neon DB creds + git connection).
 - After promoting, wait ~1 min for CDN cache invalidation
-- **Bump `APP_VERSION`** in `frontend/public/service-worker.js` after promoting if non-fingerprinted files changed — phones serve stale-while-revalidate cached JS indefinitely without this
+- `APP_VERSION` is stamped from the git SHA at build time (see Service Worker & Caching) — no manual bump step
 - Vercel auth: token in Windows User env var `VERCEL_API_KEY` (scoped to `gis-6579s-projects`); the CLI's cookie login is still the old `hussam0is` account, so always pass `--token` + `--scope gis-6579s-projects`
 
 ### Vercel Route Configuration
@@ -444,8 +444,8 @@ adb reverse tcp:8765 tcp:8765                                # Forward mock TSC3
 - Chrome 144+ has broken CDP WebSocket — use ADB-only testing
 - ADB screenshot scale factor: ~1.45 (multiply visual coords by 1.45 for ADB tap)
 - **NEVER** run `pm clear com.android.chrome` or `adb kill-server`
-- Service worker must be bumped (`APP_VERSION` in `frontend/public/service-worker.js`) after deploying non-fingerprinted changes
-- Deploy-test cycle: push to `dev` → wait ~2 min for the auto production build → bump SW version if non-fingerprinted files changed
+- Service worker version is stamped automatically at build time (git SHA) — deploys self-invalidate the shell cache
+- Deploy-test cycle: push to `dev` → wait ~2 min for the auto production build
 - Use `manholes-mapper-phone-user` or `mobile-phone-tester` skills for phone interaction
 
 ## Ports & Defaults

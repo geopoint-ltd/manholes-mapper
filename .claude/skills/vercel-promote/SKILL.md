@@ -15,10 +15,10 @@ There is no promote step anymore; this skill now verifies the auto-deploy succee
 
 1. Working tree committed and pushed to `dev` (`git status` clean). Record the pushed SHA:
    `git rev-parse HEAD`.
-2. **Service-worker check.** If the pushed commits touched non-fingerprinted files
-   (`frontend/public/service-worker.js`, `frontend/styles.css`) without bumping `APP_VERSION`
-   at the top of `frontend/public/service-worker.js`, bump it now, commit, push, and continue
-   with that new SHA — otherwise phones keep serving stale cached files indefinitely.
+2. **Service-worker version is automatic since 2026-07-20.** `npm run build` stamps
+   `APP_VERSION` in `dist/service-worker.js` from the git commit hash
+   (`frontend/build-tools/stamp-sw-version.mjs`), so every deploy invalidates the shell
+   cache — do NOT hand-bump the literal in `frontend/public/service-worker.js` anymore.
 
 ## Step 1 — Tooling
 
@@ -53,8 +53,9 @@ matches step 0. Poll every ~30 s (builds typically take ~1 min; give up after ~1
 
 ## Step 4 — Report
 
-Tell the user: the deployed SHA + commit subject, that production
-(https://manholes-mapper-three.vercel.app) now serves it, and whether `APP_VERSION` was bumped.
+Tell the user: the deployed SHA + commit subject, and that production
+(https://manholes-mapper-three.vercel.app) now serves it (the SW version is stamped
+from that SHA automatically).
 
 ## Rollback
 

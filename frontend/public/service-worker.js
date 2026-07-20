@@ -9,13 +9,11 @@
  * same‑origin GET requests use stale‑while‑revalidate.
  */
 
-// Bump the application version whenever the caching strategy changes.  This
-// ensures that old caches are cleaned up and the new service worker
-// installs a fresh set of resources.  Previously the stale‑while‑revalidate
-// handler for runtime requests would simply return an unresolved promise if
-// the network was unavailable and there was no cached response, causing
-// offline pages to break.  Increasing the version here forces browsers
-// to pick up the updated logic.
+// APP_VERSION keys the shell/runtime cache names. In production builds the
+// literal below is OVERWRITTEN at build time by
+// frontend/build-tools/stamp-sw-version.mjs (git commit hash), so every
+// deploy invalidates the shell cache automatically — no manual bump needed.
+// The literal only matters for the dev server. Historical bump log:
 // v133: dev and feature/v2-smart-field both bumped to v132 independently
 // (production already serves v132) — the merged result must go higher.
 // v135: styles.css changed (read-only banner CSS in 21668d5) without a bump.

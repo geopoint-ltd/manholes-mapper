@@ -2,7 +2,7 @@
   "scripts": {
     "start": "npx vercel dev --debug",
     "dev": "cd frontend && vite",
-    "build": "cd frontend && vite build",
+    "build": "cd frontend && vite build && node build-tools/stamp-sw-version.mjs",
     "preview": "cd frontend && vite preview",
     "lint": "cd frontend && eslint --ext .js,.ts src",
     "lint:fix": "cd frontend && eslint --ext .js,.ts src --fix",
