@@ -18,7 +18,7 @@ A professional, high-performance Progressive Web Application (PWA) for undergrou
 ### What Makes It Special
 
 1. **Canvas-first network editor** - a hand-rolled, high-performance HTML5 Canvas graph editor with spatial indexing, progressive rendering, view-stretch, and RTL support. No third-party graph library.
-2. **Survey-grade GNSS integration** - live RTK position capture from Trimble R780 via Bluetooth SPP / WiFi TCP on Android (Capacitor); displays HRMS/VRMS progress toward RTK-fixed accuracy.
+2. **Survey-grade GNSS integration** - live RTK position capture from Trimble R780 via Bluetooth SPP on Android (Capacitor), or via TMM (Trimble Mobile Manager) mock location; displays HRMS/VRMS progress toward RTK-fixed accuracy.
 3. **3D underground visualisation** - one-click Three.js fly-through of the surveyed pipe network; pipe depths and manhole shafts reconstructed from field measurements.
 4. **Offline-first PWA** - Service Worker + IndexedDB + localStorage hybrid; surveyors capture in the field with zero connectivity and sync when back on network.
 5. **Intelligent issue detection** - real-time sketch audit (missing coordinates, negative gradients, long edges, merge candidates) with in-canvas navigation to each issue.
@@ -140,7 +140,6 @@ Manholes Mapper is a lightweight yet powerful tool designed for field workers to
 - **Survey Node Dialog**: Optimized form for survey data entry
 - **Multiple Connection Types**:
   - Bluetooth SPP for Trimble R780
-  - WiFi TCP (192.168.1.10:5017)
   - TMM (Third-party NMEA over Wi-Fi/Bluetooth)
   - Browser geolocation fallback
 - **Precision Measurement**: Gated capture with accuracy thresholds
@@ -234,7 +233,6 @@ manholes-mapper/
 │   ├── field-stepper/      # Full-screen one-field-per-screen data entry + CONNECT screen
 │   ├── gnss/               # GNSS/Live Measure module
 │   │   ├── bluetooth-adapter.js   # Bluetooth SPP connection
-│   │   ├── wifi-adapter.js        # WiFi TCP connection
 │   │   ├── mock-adapter.js        # Mock for development
 │   │   ├── nmea-parser.js         # NMEA sentence parsing
 │   │   ├── gnss-state.js          # State management
@@ -458,15 +456,14 @@ Live Measure mode enables:
 | Method | Platform | Description |
 | :--- | :--- | :--- |
 | Bluetooth SPP | Android | Bluetooth Classic Serial Port Profile connection |
-| WiFi TCP | Android | TCP connection over R780's WiFi hotspot |
+| TMM (browser location) | Any | Trimble Mobile Manager feeds RTK as Android mock location |
 
-**Note**: The GNSS features require building as a native Android app using Capacitor, as browsers cannot access Bluetooth SPP or raw TCP sockets.
+**Note**: The Bluetooth SPP path requires building as a native Android app using Capacitor, as browsers cannot access Bluetooth SPP.
 
 ### Trimble R780 Configuration
 
 1. **Enable NMEA Output**: Configure the R780 to output NMEA sentences (GGA and RMC at minimum).
 2. **Bluetooth Pairing**: Pair the R780 with your Android device in system Bluetooth settings.
-3. **WiFi Mode**: Alternatively, connect your device to the R780's WiFi hotspot (default IP: 192.168.1.10, port: 5017).
 
 ### Building the Android App
 
@@ -489,16 +486,10 @@ npm install @e-is/capacitor-bluetooth-serial
 npx cap sync android
 ```
 
-For WiFi TCP support:
-```bash
-npm install capacitor-tcp-socket
-npx cap sync android
-```
-
 ### Using Live Measure Mode
 
 1. **Enable Live Measure**: Tap the GPS icon in the canvas toolbar.
-2. **Connect to R780**: Tap "Connect to R780" and select your paired device (or enter WiFi IP).
+2. **Connect to R780**: Tap "Connect to R780" and select your paired device.
 3. **Monitor Position**: The status pill shows fix quality, satellite count, and HDOP.
 4. **Capture Points**:
    - Position yourself at a manhole.

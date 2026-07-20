@@ -14,7 +14,6 @@ export const ConnectionState = {
 // Connection types
 export const ConnectionType = {
   BLUETOOTH: 'bluetooth',
-  WIFI: 'wifi',
   MOCK: 'mock',
   BROWSER: 'browser',
   TMM: 'tmm'

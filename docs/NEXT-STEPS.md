@@ -2,8 +2,8 @@
 
 > **Status update 2026-07-20:** this March-2026 roadmap is ~85% complete and now mostly historical.
 > Item statuses below were re-verified against the current codebase. Still genuinely open:
-> **#13** (capacitor-tcp-socket uninstalled) and the tail of **#12** (`admin-panel.js`,
-> `input-flow-settings.js`, `projects-settings.js` untested). #14 is partially addressed.
+> the tail of **#12** (`admin-panel.js`, `input-flow-settings.js`, `projects-settings.js`
+> untested). #14 is partially addressed.
 > The Metrics table at the bottom reflects March 2026; current figures: `main.js` **2,133**
 > lines, **75** unit-test files / **1,853** tests, **18** e2e specs.
 
@@ -52,7 +52,7 @@ Major theme: **Cockpit/gamification UX overhaul** with landscape-first layout, m
 
 12. **Add tests for admin panel modules** — MOSTLY DONE: tests exist for `admin-features`, `admin-fixes`, `admin-organizations`, `admin-settings`, `admin-statistics`, `admin-users`. Still untested: `admin-panel.js`, `input-flow-settings.js`, `projects-settings.js`.
 
-13. **Verify WiFi TCP socket plugin** — STILL OPEN: `wifi-adapter.js` references `capacitor-tcp-socket` but it is not in any package.json. Document as optional or add to package.json.
+13. ~~**Verify WiFi TCP socket plugin**~~ — RESOLVED 2026-07-20 by removal: the WiFi TCP adapter targeted a plugin API that doesn't exist (`registerDataListener` vs the real polling `read()`, wrong plugin name) and had no UI entry point, so it could never have worked. `wifi-adapter.js` and all references were deleted; GNSS paths are now Bluetooth SPP, TMM/browser location, and mock.
 
 14. **Centralize state management** — PARTIALLY DONE: `state/event-bus.js` and `state/app-store.js` now exist and newer modules use them, but the older singletons (`gnssState`, `menuEvents`, `authGuard`, `syncService`) remain uncoordinated.
 

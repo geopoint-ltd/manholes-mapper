@@ -38,7 +38,9 @@
 // higher→lower with undo snackbar), CONNECT screen for flat/missing-Z/far
 // shots, F.reverseEdge + edgeReverse undo, edge.direction_source provenance,
 // Home laterals locked Home→main, chain pointer skips Home nodes.
-const APP_VERSION = 'v145';
+// v146: dead GNSS WiFi TCP adapter removed (targeted a nonexistent plugin API,
+// no UI entry point) — ConnectionType.WIFI dropped, connection manager slimmed.
+const APP_VERSION = 'v146';
 const PRECACHE = 'graph-sketch-shell-' + APP_VERSION;
 const RUNTIME = 'graph-sketch-runtime-' + APP_VERSION;
 

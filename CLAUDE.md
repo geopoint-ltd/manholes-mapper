@@ -148,7 +148,7 @@ CSS is imported via JS (`import '../styles.css'`) for Vite dev/build compatibili
 
 - **`legacy/`** — The original monolith, now mostly modularized into ~24 files. `main.js` (~2100 lines, still ESLint-excluded) holds the canvas render loop and top-level wiring. Extracted modules include: `shared-state.js` (window-globals bridge for legacy ↔ ES module communication), `canvas-draw.js`, `pointer-handlers.js`, `graph-crud.js`, `details-panel.js`, `storage-manager.js`, `undo-redo.js`, `gnss-handlers.js`, `tsc3-handlers.js`, `admin-handlers.js`, `library-manager.js`, `coordinate-handlers.js`, `finish-workday.js`, `field-history.js`, `wizard-helpers.js`, `home-renderer.js`, `auth-ui.js`, `i18n-ui.js`, `mobile-menu.js`, `toolbar-events.js`, `project-ui.js`, `view-utils.js`, `app-utils.js`, `legacy-import-loader.js`
 - **`auth/`** — Better Auth client (`auth-client.js`), session guards (`auth-guard.js` with 15-min polling), React auth UI (`auth-provider.jsx`), sync-service (`sync-service.js` with 2s debounce, AbortController cleanup), permissions/RBAC (`permissions.js`)
-- **`gnss/`** — Live Measure: GNSS state machine (`gnss-state.js` singleton), NMEA parsing (`nmea-parser.js` — GGA/RMC), browser-location-adapter (bridges `navigator.geolocation` → `gnssState`, infers fix quality from accuracy), Bluetooth/WiFi/TMM/mock adapters, connection manager, canvas marker rendering (`gnss-marker.js`), point capture dialog, precision-gated measurement (`precision-measure.js`)
+- **`gnss/`** — Live Measure: GNSS state machine (`gnss-state.js` singleton), NMEA parsing (`nmea-parser.js` — GGA/RMC), browser-location-adapter (bridges `navigator.geolocation` → `gnssState`, infers fix quality from accuracy), Bluetooth/TMM/mock adapters, connection manager, canvas marker rendering (`gnss-marker.js`), point capture dialog, precision-gated measurement (`precision-measure.js`)
 - **`survey/`** — TSC3 survey controller integration: device picker dialog, TSC3 Bluetooth/WebSocket adapters (Trimble TSC3 receivers), TSC3 NMEA parser, survey node-type dialog, connection manager
 - **`admin/`** — Admin tab modules lazy-imported by the hub `legacy/admin-handlers.js`: `admin-users.js`, `admin-organizations.js`, `admin-features.js`, `admin-fixes.js` (cross-sketch issues & fix suggestions), `admin-statistics.js` (KPI dashboard), `admin-settings.js`, `input-flow-settings.js` (conditional field logic), `projects-settings.js`
 - **`features/`** — Canvas drawing primitives (`drawing-primitives.js`), graph rendering engine (`rendering.js`), node icons (`node-icons.js`: manhole, drainage, house connection icons), measurement rail (`measurement-rail.js`), live pipe-slope intelligence (`gradient-engine.js`: invert/terrain gradient per edge, uphill alerts on status transitions, exempt types Home/ForLater/Issue), Z-aware auto-connect decision engine (`connection-suggest.js`: pure logic, tiers auto/auto-home/flip-offer/ask/exists per docs/SMART_MEASUREMENT_WIZARD.md §B)
@@ -336,7 +336,7 @@ Also read by the API: `INITIAL_SUPER_ADMIN_EMAIL` (`api/_lib/db.js` — a newly 
 
 **Backend:** Vercel serverless functions (Node.js), Better Auth 1.4.x, Neon Postgres (`@neondatabase/serverless`), `@vercel/postgres`
 
-**Mobile:** Capacitor 8.x (Android), Bluetooth SPP plugin, WiFi TCP plugin
+**Mobile:** Capacitor 8.x (Android), Bluetooth SPP plugin
 
 **Testing:** Vitest 4.x (unit, ~1790 tests), Playwright 1.5x (E2E), jsdom
 
@@ -359,7 +359,7 @@ Also read by the API: `INITIAL_SUPER_ADMIN_EMAIL` (`api/_lib/db.js` — a newly 
 
 App ID: `com.geopoint.manholemapper`. Config: repo-root `capacitor.config.ts` (moved from frontend/ 2026-07-15 so root-run `cap sync` finds it next to `android/`); web dir: `frontend/dist`. Cleartext enabled for dev. Android scheme: `https`. **`capacitor.config.ts` sets `server.url`, which makes the native WebView load that remote URL directly (bundled assets and the fetch proxy are bypassed) — keep it pointed at `https://manholes-mapper-three.vercel.app` and re-run `npx cap sync android` after changing it.** The `capacitor-api-proxy.js` interception only matters when `server.url` is removed.
 
-**Installed plugins:** `@capacitor/core` 8.x, `@capacitor/android` 8.x, `@e-is/capacitor-bluetooth-serial` 6.x (Bluetooth SPP for TSC3 & GNSS receivers). WiFi TCP (`capacitor-tcp-socket`) referenced in code but may need manual install.
+**Installed plugins:** `@capacitor/core` 8.x, `@capacitor/android` 8.x, `@e-is/capacitor-bluetooth-serial` 6.x (Bluetooth SPP for TSC3 & GNSS receivers).
 
 **API Proxy (`frontend/src/capacitor-api-proxy.js`):** On native Android, the WebView runs on `https://localhost` with no backend. This module wraps `window.fetch()` to intercept `/api/*` calls and route them to `https://manholes-mapper-three.vercel.app` with `credentials: 'include'`. **Must load before any fetch() calls** in `frontend/src/main-entry.js`.
 
@@ -402,17 +402,12 @@ The app connects to Trimble TSC3 survey controllers to receive real-time survey 
 
 ## GNSS Receiver Connection (`frontend/src/gnss/`)
 
-The app connects to GNSS receivers for live RTK positioning. Adapters (one active at a time): Bluetooth SPP, WiFi TCP, TMM, browser location, mock.
+The app connects to GNSS receivers for live RTK positioning. Adapters (one active at a time): Bluetooth SPP, TMM, browser location, mock. (A WiFi TCP adapter existed until 2026-07-20 but was removed — it targeted a plugin API that doesn't exist and had no UI entry point; see git history of `gnss/wifi-adapter.js` if the feature is ever revived.)
 
 ### Bluetooth SPP (`bluetooth-adapter.js`)
 - Same plugin as TSC3: `@e-is/capacitor-bluetooth-serial`
 - Targets: Trimble R780, Trimble R2 (via TMM)
 - Data: NMEA sentences (GGA, RMC) parsed by `nmea-parser.js`
-
-### WiFi TCP (`wifi-adapter.js`)
-- Plugin: `capacitor-tcp-socket` (may need manual install)
-- Default port: **5017** (Trimble receivers)
-- Auto-reconnection with exponential backoff (max 5 attempts)
 
 ### Browser Location (`browser-location-adapter.js`)
 - Bridges `navigator.geolocation.watchPosition()` → `gnssState`
@@ -462,7 +457,6 @@ adb reverse tcp:8765 tcp:8765                                # Forward mock TSC3
 | Mock TSC3 WS | WebSocket | 8765 | Survey controller simulator |
 | Mock TSC3 HTTP | HTTP | 3001 | Control API + Web UI |
 | Chrome CDP | TCP | 9222 | Phone debugging (via ADB forward) |
-| GNSS WiFi TCP | TCP | 5017 | Trimble receiver default |
 
 ## Knowledge Base
 

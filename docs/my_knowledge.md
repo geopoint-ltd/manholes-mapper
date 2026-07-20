@@ -319,7 +319,7 @@ Note: `__getSketchStats`, `__saveToStorage`, `__getViewState`, `__selectNodeById
 | object_id | Type | How/When | Line | Related |
 |---|---|---|---|---|
 | `ConnectionState` | constant | `.CONNECTED`, `.DISCONNECTED`, `.CONNECTING`, `.ERROR` | 7 | all adapters |
-| `ConnectionType` | constant | `.BLUETOOTH`, `.WIFI`, `.MOCK`, `.BROWSER`, `.TMM` | 15 | all adapters |
+| `ConnectionType` | constant | `.BLUETOOTH`, `.MOCK`, `.BROWSER`, `.TMM` | 15 | all adapters |
 | `GNSSStateManager` | class | Central GNSS state — use singleton `gnssState` | 27 | all GNSS modules |
 | `gnssState` | singleton | `gnssState.on('position', cb)`, `gnssState.updatePosition(data)`, `gnssState.capturePoint(nodeId)` | 303 | all GNSS modules |
 | `gnssState.position` | object | `{lat, lon, alt, fixQuality, fixLabel, satellites, hdop, accuracy, isValid, ...}` | 48 | position data |
@@ -334,7 +334,6 @@ Note: `__getSketchStats`, `__saveToStorage`, `__getViewState`, `__selectNodeById
 |---|---|---|---|---|
 | `gnssConnection` | singleton | Unified GNSS connection interface | 326 | all adapters, `gnssState` |
 | `gnssConnection.connectBluetooth(mac)` | method | Connect Bluetooth SPP to GNSS receiver | 97 | `BluetoothAdapter` |
-| `gnssConnection.connectWifi(host, port)` | method | Connect TCP to GNSS receiver (port 5017) | 122 | `WifiAdapter` |
 | `gnssConnection.connectTMM(httpPort?)` | method | Connect Trimble Mobile Manager | 146 | `TMMAdapter` |
 | `gnssConnection.connectMock()` | method | Connect mock for testing | 191 | `MockGNSSAdapter` |
 | `gnssConnection.disconnect()` | method | Disconnect active adapter | 206 | all adapters |
@@ -344,7 +343,6 @@ Note: `__getSketchStats`, `__saveToStorage`, `__getViewState`, `__selectNodeById
 | object_id | Type | File | Purpose |
 |---|---|---|---|
 | `BluetoothAdapter` | class | `bluetooth-adapter.js` | Bluetooth SPP GNSS (Capacitor native) |
-| `WifiAdapter` | class | `wifi-adapter.js` | TCP GNSS (Capacitor native, port 5017) |
 | `MockGNSSAdapter` | class | `mock-adapter.js` | Simulated GNSS (Tel Aviv default) |
 | `TMMAdapter` | class | `tmm-adapter.js` | Trimble Mobile Manager WebSocket |
 | `NMEAParser` | class | `nmea-parser.js` | GGA/RMC NMEA sentence parser |

@@ -33,7 +33,6 @@ export {
 
 // Adapters (for advanced usage)
 export { BluetoothAdapter } from './bluetooth-adapter.js';
-export { WifiAdapter } from './wifi-adapter.js';
 export { MockGNSSAdapter } from './mock-adapter.js';
 export { TMMAdapter, translateTMMPosition } from './tmm-adapter.js';
 

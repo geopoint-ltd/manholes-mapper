@@ -1,11 +1,10 @@
 /**
  * GNSS Connection Manager
  * Unified interface for connecting to GNSS receivers
- * Supports Bluetooth SPP, WiFi TCP, and Mock connections
+ * Supports Bluetooth SPP, TMM, and Mock connections
  */
 
 import { BluetoothAdapter } from './bluetooth-adapter.js';
-import { WifiAdapter } from './wifi-adapter.js';
 import { MockGNSSAdapter } from './mock-adapter.js';
 import { TMMAdapter } from './tmm-adapter.js';
 import { gnssState, ConnectionState, ConnectionType } from './gnss-state.js';
@@ -17,7 +16,6 @@ import { gnssState, ConnectionState, ConnectionType } from './gnss-state.js';
 class GNSSConnectionManager {
   constructor() {
     this.bluetoothAdapter = new BluetoothAdapter();
-    this.wifiAdapter = new WifiAdapter();
     this.mockAdapter = new MockGNSSAdapter();
     this.tmmAdapter = new TMMAdapter();
     this.activeAdapter = null;
@@ -25,7 +23,6 @@ class GNSSConnectionManager {
 
     // Wire up adapters to state manager
     this.setupAdapterCallbacks(this.bluetoothAdapter, ConnectionType.BLUETOOTH);
-    this.setupAdapterCallbacks(this.wifiAdapter, ConnectionType.WIFI);
     this.setupAdapterCallbacks(this.mockAdapter, ConnectionType.MOCK);
     this.setupAdapterCallbacks(this.tmmAdapter, ConnectionType.TMM);
   }
@@ -74,14 +71,6 @@ class GNSSConnectionManager {
   }
 
   /**
-   * Check if WiFi TCP is available
-   * @returns {boolean}
-   */
-  isWifiAvailable() {
-    return this.wifiAdapter.isAvailable();
-  }
-
-  /**
    * Get list of paired Bluetooth devices
    * @returns {Promise<Array>}
    */
@@ -107,31 +96,6 @@ class GNSSConnectionManager {
     if (!success) {
       gnssState.setConnectionState(ConnectionState.ERROR, {
         error: 'Bluetooth connection failed'
-      });
-    }
-
-    return success;
-  }
-
-  /**
-   * Connect via WiFi TCP
-   * @param {string} host - IP address or hostname
-   * @param {number} port - TCP port (default 5017)
-   * @returns {Promise<boolean>}
-   */
-  async connectWifi(host, port = 5017) {
-    // Disconnect any existing connection
-    await this.disconnect();
-
-    gnssState.setConnectionState(ConnectionState.CONNECTING, {
-      type: ConnectionType.WIFI
-    });
-
-    const success = await this.wifiAdapter.connect(host, port);
-    
-    if (!success) {
-      gnssState.setConnectionState(ConnectionState.ERROR, {
-        error: 'WiFi TCP connection failed'
       });
     }
 
@@ -213,9 +177,6 @@ class GNSSConnectionManager {
     // Also ensure all adapters are disconnected
     if (this.bluetoothAdapter.getIsConnected()) {
       await this.bluetoothAdapter.disconnect();
-    }
-    if (this.wifiAdapter.getIsConnected()) {
-      await this.wifiAdapter.disconnect();
     }
     if (this.mockAdapter.getIsConnected()) {
       this.mockAdapter.disconnect();

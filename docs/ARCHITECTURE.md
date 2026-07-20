@@ -73,7 +73,6 @@ frontend/
 │   │   └── field-stepper.js      # Stepper flow + CONNECT screen (wizard Phase 1)
 │   ├── gnss/               # GNSS/Live Measure module
 │   │   ├── bluetooth-adapter.js          # Bluetooth SPP (Android)
-│   │   ├── wifi-adapter.js               # WiFi TCP (Android)
 │   │   ├── tmm-adapter.js                # Third-party NMEA adapter
 │   │   ├── browser-location-adapter.js   # Browser geolocation fallback
 │   │   ├── mock-adapter.js               # Mock for testing
@@ -295,7 +294,6 @@ api/
 **Components:**
 - **Connection Adapters:**
   - `bluetooth-adapter.js` — Bluetooth SPP (Android)
-  - `wifi-adapter.js` — WiFi TCP (Android)
   - `tmm-adapter.js` — Third-party NMEA over Wi-Fi/Bluetooth
   - `browser-location-adapter.js` — Browser geolocation fallback
   - `mock-adapter.js` — Browser testing
@@ -617,9 +615,8 @@ destroyAnnotationLayer(); // cleanup on unmount
 | | Neon Postgres | ^0.10.0 | Database |
 | **Mobile** | Capacitor | ^8.0.2 | Android native |
 | | Capacitor Bluetooth | ^6.0.3 | Bluetooth SPP |
-| | Capacitor TCP | - | WiFi TCP socket |
 | **Utils** | proj4 | ^2.20.2 | Coordinate transformations |
-| | Tailwind CSS | ^4.1.18 | Styling engine |
+| | Tailwind CSS | ^4.1.18 | In package.json but NOT wired up (no directive/plugin) |
 
 ---
 

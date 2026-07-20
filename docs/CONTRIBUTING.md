@@ -118,7 +118,7 @@ type(scope): description
 
 **Examples:**
 ```
-feat(gnss): add WiFi TCP connection support
+feat(gnss): add TMM auto-discovery support
 
 Add new adapter for connecting to Trimble R780 via WiFi hotspot.
 Includes connection manager, state management, and error handling.

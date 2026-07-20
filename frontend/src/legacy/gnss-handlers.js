@@ -62,7 +62,7 @@ function setLiveMeasureMode(enabled) {
 
     // Skip browser adapter when TMM (or another managed adapter) is already connected
     const connType = gnssState.connectionType;
-    if (connType !== 'tmm' && connType !== 'bluetooth' && connType !== 'wifi' && connType !== 'mock') {
+    if (connType !== 'tmm' && connType !== 'bluetooth' && connType !== 'mock') {
       // Start browser geolocation → gnssState bridge
       const started = startBrowserLocationAdapter();
       if (!started) {

@@ -19,8 +19,9 @@ describe('ConnectionState constants', () => {
 describe('ConnectionType constants', () => {
   it('should define all connection types', () => {
     expect(ConnectionType.BLUETOOTH).toBe('bluetooth');
-    expect(ConnectionType.WIFI).toBe('wifi');
     expect(ConnectionType.MOCK).toBe('mock');
+    expect(ConnectionType.TMM).toBe('tmm');
+    expect(ConnectionType.BROWSER).toBe('browser');
   });
 });
 
@@ -108,7 +109,7 @@ describe('GNSSStateManager', () => {
       state.setConnectionState(ConnectionState.CONNECTED, {
         deviceName: 'Device',
         deviceAddress: 'AA:BB',
-        type: ConnectionType.WIFI,
+        type: ConnectionType.TMM,
       });
 
       state.setConnectionState(ConnectionState.DISCONNECTED);
