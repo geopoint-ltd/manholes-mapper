@@ -51,6 +51,12 @@ npm run dev
 
 ---
 
+## 📚 Tutorials
+
+New to the app? Start with the **[illustrated tutorial series](docs/tutorials/README.md)** —
+eight hands-on guides with screenshots covering everything from your first
+sketch to survey-grade GNSS capture, the 3D view, and GIS export.
+
 ## Overview
 
 Manholes Mapper is a lightweight yet powerful tool designed for field workers to capture, manage, and visualize infrastructure network data (manholes, home connections, and drainage systems). It operates seamlessly without internet connectivity, providing a desktop-class editing experience on mobile and tablet devices.
