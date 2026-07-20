@@ -11,6 +11,7 @@ import { createRoot } from 'react-dom/client';
 import { signInWithEmail, signUpWithEmail, signOutUser, getCurrentSession } from './auth-client.js';
 import { refreshSession } from './auth-guard.js';
 import { isRTL } from '../i18n.js';
+import { STORAGE_KEYS } from '../state/persistence.js';
 
 // Keep track of React roots to avoid multiple createRoot calls on the same container
 const roots = new Map();
@@ -134,7 +135,9 @@ function LanguageToggle() {
 
     // 1. Update global state that the translator reads
     try { window.currentLang = newLang; } catch (_) { /* */ }
-    localStorage.setItem('lang', newLang);
+    // Persist under the canonical key main.js reads at boot — the old 'lang'
+    // key was never read back, so login-page choices didn't survive a reload.
+    localStorage.setItem(STORAGE_KEYS.lang, newLang);
 
     // 2. Update <html> lang + dir
     document.documentElement.lang = newLang;

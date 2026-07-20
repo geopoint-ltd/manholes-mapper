@@ -40,7 +40,10 @@
 // Home laterals locked Home→main, chain pointer skips Home nodes.
 // v146: dead GNSS WiFi TCP adapter removed (targeted a nonexistent plugin API,
 // no UI entry point) — ConnectionType.WIFI dropped, connection manager slimmed.
-const APP_VERSION = 'v146';
+// v147: language-switch fix — unified toolbar/sidebar retranslate via <html lang>
+// observer in addition to appLanguageChanged; applyLangToStaticUI failures can
+// no longer skip the event dispatch; auth-screen toggle persists the right key.
+const APP_VERSION = 'v147';
 const PRECACHE = 'graph-sketch-shell-' + APP_VERSION;
 const RUNTIME = 'graph-sketch-runtime-' + APP_VERSION;
 

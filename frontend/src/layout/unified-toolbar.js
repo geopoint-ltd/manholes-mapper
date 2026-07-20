@@ -11,6 +11,7 @@ import './unified-toolbar.css';
 let toolbarEl = null;
 let flyoutEl = null;
 let flyoutOpen = false;
+let langObserver = null;
 
 /**
  * Build and inject the unified toolbar into #canvasContainer
@@ -111,8 +112,12 @@ export function initUnifiedToolbar() {
   syncUndoRedoState();
   syncModeState();
 
-  // Re-translate on language change
+  // Re-translate on language change. Two triggers on purpose: the app event
+  // is the primary path, and the <html lang> observer catches every switch
+  // path that never dispatches it (auth-screen toggle, upstream failures).
   document.addEventListener('appLanguageChanged', retranslateToolbar);
+  langObserver = new MutationObserver(retranslateToolbar);
+  langObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['lang'] });
 }
 
 /**
@@ -405,6 +410,9 @@ function delegate(newId, origId) {
  * Tear down the unified toolbar and clean up event listeners
  */
 export function destroyUnifiedToolbar() {
+  document.removeEventListener('appLanguageChanged', retranslateToolbar);
+  langObserver?.disconnect();
+  langObserver = null;
   toolbarEl?.remove();
   toolbarEl = null;
   flyoutEl = null;

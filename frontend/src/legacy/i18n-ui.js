@@ -24,6 +24,15 @@ const t = (...args) => (typeof window.t === 'function' ? window.t(...args) : arg
 const isRTL = (lang) => (typeof window.isRTL === 'function' ? window.isRTL(lang) : false);
 
 export function applyLangToStaticUI() {
+  // Apply document-level RTL/LTR direction and language tag FIRST — components
+  // that watch <html lang> (unified toolbar/sidebar) and fallback labels that
+  // read documentElement.lang must see the new language even if one of the
+  // rebuild steps below fails on a particular device/app state.
+  const currentLang = S.currentLang;
+  document.documentElement.dir = isRTL(currentLang) ? 'rtl' : 'ltr';
+  document.documentElement.lang = currentLang;
+  document.body.classList.toggle('rtl', isRTL(currentLang));
+
   // Sweep all elements with translation data-attributes
   document.querySelectorAll('[data-i18n]').forEach((el) => {
     const key = el.getAttribute('data-i18n');
@@ -90,9 +99,12 @@ export function applyLangToStaticUI() {
   // Rebuild the help list — it is an array of translated strings, not a single key
   // Format: "KEY: description" — wrap the key portion in <kbd> for visual distinction
   const helpListEl = document.getElementById('helpList');
-  if (helpListEl) {
+  const helpLines = t('helpLines');
+  // t() returns the key string when a translation is missing — only rebuild
+  // when we actually got the array, so a dictionary gap can't abort the rest.
+  if (helpListEl && Array.isArray(helpLines)) {
     helpListEl.innerHTML = '';
-    t('helpLines').forEach((line) => {
+    helpLines.forEach((line) => {
       const li = document.createElement('li');
       const colonIdx = line.indexOf(':');
       if (colonIdx > 0 && colonIdx < 30) {
@@ -116,17 +128,9 @@ export function applyLangToStaticUI() {
     });
   }
 
-  const currentLang = S.currentLang;
-
-  // Apply document-level RTL/LTR direction and language tag
-  document.documentElement.dir = isRTL(currentLang) ? 'rtl' : 'ltr';
-  document.documentElement.lang = currentLang;
-  document.body.classList.toggle('rtl', isRTL(currentLang));
-
-  // Re-render edge legend (alignment depends on current language direction)
-  renderEdgeLegend();
-
-  // Update street view pegman labels (managed by an external module)
-  updateStreetViewTranslations(t);
-  updateLayersConfigTranslations(t);
+  // Best-effort trailing updates — none of these may abort the others (a
+  // partial failure here previously left later steps untranslated).
+  try { renderEdgeLegend(); } catch (err) { console.error('[i18n] edge legend re-render failed:', err); }
+  try { updateStreetViewTranslations(t); } catch (err) { console.error('[i18n] street view translation failed:', err); }
+  try { updateLayersConfigTranslations(t); } catch (err) { console.error('[i18n] layers config translation failed:', err); }
 }

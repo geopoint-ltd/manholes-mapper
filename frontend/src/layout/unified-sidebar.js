@@ -12,6 +12,8 @@ let sidebarEl = null;
 let toggleBtn = null;
 let activeTab = 'details';
 let isOpen = false;
+let langObserver = null;
+let lastAppliedLang = null;
 
 const TAB_CONFIG = [
   { id: 'details', icon: 'edit_note', labelKey: 'sidebar.details' },
@@ -99,7 +101,14 @@ export function initUnifiedSidebar() {
   updateSketchesTabVisibility();
 
   // ── Re-translate on language change ──
+  // Two triggers on purpose: the app event is the primary path, and the
+  // <html lang> observer catches every switch path that never dispatches it
+  // (auth-screen toggle, upstream failures). retranslateSidebar dedupes by
+  // language so the double trigger rebuilds the tabs only once per switch.
+  lastAppliedLang = window.currentLang === 'en' ? 'en' : 'he';
   document.addEventListener('appLanguageChanged', retranslateSidebar);
+  langObserver = new MutationObserver(retranslateSidebar);
+  langObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['lang'] });
 }
 
 /**
@@ -107,6 +116,9 @@ export function initUnifiedSidebar() {
  */
 function retranslateSidebar() {
   if (!sidebarEl) return;
+  const lang = window.currentLang === 'en' ? 'en' : 'he';
+  if (lang === lastAppliedLang) return;
+  lastAppliedLang = lang;
   const t = window.t || ((k) => k);
 
   const labels = {
@@ -518,6 +530,10 @@ function reparentSketchPanel() {
  * Tear down the unified sidebar and restore original sidebar
  */
 export function destroyUnifiedSidebar() {
+  document.removeEventListener('appLanguageChanged', retranslateSidebar);
+  langObserver?.disconnect();
+  langObserver = null;
+  lastAppliedLang = null;
   // Restore original window functions if saved
   if (sidebarEl) {
     // Move details content back to original sidebar

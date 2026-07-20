@@ -533,7 +533,15 @@ export function initToolbarEvents() {
       }
     });
 
-    applyLangToStaticUI();
+    // applyLangToStaticUI must never block the appLanguageChanged dispatch:
+    // components like the unified toolbar/sidebar retranslate only on that
+    // event, so a throw here would leave them stuck in the previous language
+    // while the data-i18n sweep already translated the rest of the app.
+    try {
+      applyLangToStaticUI();
+    } catch (err) {
+      console.error('[i18n] applyLangToStaticUI failed:', err);
+    }
     document.title = t('appTitle') || 'Manhole Mapper';
     document.dispatchEvent(new Event('appLanguageChanged'));
     const homePanel = document.getElementById('homePanel');
