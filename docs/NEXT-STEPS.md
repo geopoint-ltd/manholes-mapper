@@ -1,5 +1,12 @@
 # Next Steps — Based on Analysis of Last 100 Commits (Mar 3–7, 2026)
 
+> **Status update 2026-07-20:** this March-2026 roadmap is ~85% complete and now mostly historical.
+> Item statuses below were re-verified against the current codebase. Still genuinely open:
+> **#13** (capacitor-tcp-socket uninstalled) and the tail of **#12** (`admin-panel.js`,
+> `input-flow-settings.js`, `projects-settings.js` untested). #14 is partially addressed.
+> The Metrics table at the bottom reflects March 2026; current figures: `main.js` **2,133**
+> lines, **75** unit-test files / **1,853** tests, **18** e2e specs.
+
 ## Sprint Summary
 
 100 commits in 4 days: 16 features, 10 bug fixes, 6 design improvements, 1 test commit.
@@ -19,61 +26,45 @@ Major theme: **Cockpit/gamification UX overhaul** with landscape-first layout, m
 
 ## P1 — Stabilization (Before Adding More Features)
 
-4. **Write tests for 16 new features** — Only 1 test commit (74 canvas perf tests) accompanied 16 feature additions. Priority test targets:
-   - Issue node type + comment system + notifications
-   - Cockpit layout (landscape-first, action rail, health card)
-   - Heat map rendering for data completeness
-   - Measurement rail with inline depth inputs
-   - Save & Next node editing flow
-   - One-handed edge mode (long-press drag)
-   - Edge width/color by pipe diameter
+4. ~~**Write tests for 16 new features**~~ — DONE: the suite grew from ~490 to 1,853 tests across 75 files, covering issues/comments, cockpit, heat map, measurement rail, and edge modes.
 
-5. **Test cockpit components** — 6 new cockpit files (`cockpit.js`, `action-rail.js`, `completion-engine.js`, `intel-strip.js`, `quick-wins.js`, `session-tracker.js`) have zero test coverage.
+5. ~~**Test cockpit components**~~ — DONE: all six cockpit files have dedicated unit tests (`cockpit.test.ts`, `action-rail.test.ts`, `completion-engine.test.ts`, `intel-strip.test.ts`, `quick-wins.test.ts`, `session-tracker.test.ts`).
 
-6. **Fix remaining 23 open design audit issues** — From `app_state_2026-03-04/ISSUES.md` and `current_app_design/ISSUES.md` (69 tracked, 46 fixed, 23 open/deferred).
+6. **Fix remaining 23 open design audit issues** — From `app_state_2026-03-04/ISSUES.md` and `current_app_design/ISSUES.md` (69 tracked, 46 fixed, 23 open/deferred). *Historical — later superseded by the July 2026 audit series in `docs/audit_*.md`.*
 
 ---
 
 ## P2 — Technical Debt
 
-7. **Break up `main.js` (12,315 lines → target <5,000)** — Grew 48% from ~8,300 lines. Extraction candidates:
-   - Cockpit/gamification logic (recently added, self-contained)
-   - Heat map rendering (new, standalone)
-   - Measurement rail (new, extractable)
-   - Node/edge editing panels (high-change area)
-   - Canvas event handlers (touch, mouse, keyboard)
+7. ~~**Break up `main.js` (12,315 lines → target <5,000)**~~ — DONE, exceeded target: `main.js` is now **2,133 lines**, with the monolith extracted into ~24 sibling modules in `frontend/src/legacy/`.
 
-8. **Update CLAUDE.md** — Stale documentation:
-   - `main.js` line count says ~8,300 (actually 12,315)
-   - Missing: cockpit module, gamification, Issue node type, heat maps
-   - Missing API route: `/api/issue-comments`
-   - Missing cockpit directory in key directories
+8. ~~**Update CLAUDE.md**~~ — DONE: CLAUDE.md now documents the modularized legacy core, cockpit, Issue node type, heat maps, and `/api/issue-comments`, and is re-verified periodically.
 
 9. ~~**Replace silent catch handlers**~~ — DONE: Added `console.warn` to 11 listener/data-handling catch blocks. Remaining ~30 are legitimately silent (localStorage quota, DOM detection, WS close).
 
 10. ~~**Remove debug logging**~~ — DONE: Removed coordinate import debug statements from `coordinates.js` and `main.js`.
 
-11. **Audit `three.js` dependency** — `three` (v0.183.1) is in production dependencies. If only experimental/planned, move to devDependencies or remove to avoid bundle bloat.
+11. ~~**Audit `three.js` dependency**~~ — DONE: `three` moved to devDependencies (bundled only into the lazily imported `three-vendor` chunk).
 
 ---
 
 ## P3 — Medium-Term Improvements
 
-12. **Add tests for admin panel modules** — 8 large files (~160KB total) with zero test coverage: `admin-features.js`, `admin-fixes.js`, `admin-organizations.js`, `admin-panel.js`, `admin-settings.js`, `admin-users.js`, `input-flow-settings.js`, `projects-settings.js`.
+12. **Add tests for admin panel modules** — MOSTLY DONE: tests exist for `admin-features`, `admin-fixes`, `admin-organizations`, `admin-settings`, `admin-statistics`, `admin-users`. Still untested: `admin-panel.js`, `input-flow-settings.js`, `projects-settings.js`.
 
-13. **Verify WiFi TCP socket plugin** — `wifi-adapter.js` references `capacitor-tcp-socket` but it's unclear if installed. Document as optional or add to package.json.
+13. **Verify WiFi TCP socket plugin** — STILL OPEN: `wifi-adapter.js` references `capacitor-tcp-socket` but it is not in any package.json. Document as optional or add to package.json.
 
-14. **Centralize state management** — Currently 5+ singletons (`gnssState`, `projectSketches`, `menuEvents`, `authGuard`, `syncService`) with no central coordination. Consider a lightweight event bus or state container.
+14. **Centralize state management** — PARTIALLY DONE: `state/event-bus.js` and `state/app-store.js` now exist and newer modules use them, but the older singletons (`gnssState`, `menuEvents`, `authGuard`, `syncService`) remain uncoordinated.
 
-15. **Performance audit on Galaxy Note 10** — With heat maps, animations, haptic feedback, and 12K+ lines of rendering code, verify canvas stays smooth on the target device.
+15. **Performance audit on Galaxy Note 10** — Superseded by the 2026-07-19 perf pass (Lighthouse 56→88: lazy React/Leaflet, self-hosted fonts, vendor-only chunking).
 
-16. **Improve type safety** — `strict: false` in tsconfig.json. Auth modules use `any` return types. Gradual migration toward stricter types.
+16. ~~**Improve type safety**~~ — DONE: tsconfig now has `strict: true` (`strictPropertyInitialization` off).
 
-17. **E2E tests for cockpit UX** — Cover landscape layout, action rail, health card issue navigation, Save & Next flow.
+17. ~~**E2E tests for cockpit UX**~~ — DONE: `frontend/tests/e2e/cockpit.spec.ts`.
 
 ---
 
-## Metrics
+## Metrics (March 2026 — historical; see status note at top for current figures)
 
 | Metric | Value |
 |--------|-------|

@@ -1,196 +1,207 @@
 # Manholes Mapper — Complete Object Knowledge Base
 
 > Auto-generated full-app scan. Format: `object_id` (exact code name) — Type — How/When to use — Where (file:line) — Related objects
+>
+> **Updated 2026-07-20** — Section 1 re-verified against the modularized `src/legacy/` (main.js is now ~2,133 lines; most functions live in ~24 sibling modules). New sections 20–24 added (field-stepper, gradient-engine, connection-suggest, measurement-history, snackbar).
 
 ---
 
-## 1. LEGACY CORE — `src/legacy/main.js` (~12,962 lines)
+## 1. LEGACY CORE — `src/legacy/` (modularized)
+
+The former ~13k-line monolith is now `main.js` (~2,133 lines: DOM refs, state declarations, `init()`, keyboard shortcuts, window-global bridge) plus ~24 extracted sibling modules. Cross-module state flows through `shared-state.js`: the `S` state proxy (`shared-state.js:33`, getters/setters defined by main.js, mirrored into AppStore via `bridgedProperty()` at `shared-state.js:46`) and the `F` function registry (`shared-state.js:36`, populated by main.js inside `init()` — modules call `F.scheduleDraw()`, `F.renderDetails()`, `F.reverseEdge()`, etc.).
+
+All `Where` values below are `file:line` within `src/legacy/` unless another directory is shown.
 
 ### 1.1 DOM Element References
 
-| object_id | Type | How/When | Line | Related |
+| object_id | Type | How/When | Where | Related |
 |---|---|---|---|---|
-| `graphCanvas` (as `canvas`) | layout/canvas | Main drawing surface | 184 | `ctx`, `draw()`, all pointer handlers |
-| `newSketchBtn` | button | Creates new sketch | 186 | `newSketch()`, `startPanel` |
-| `homeBtn` | button | Opens home/sketch list panel | 187 | `renderHome()` |
-| `nodeModeBtn` | button | Switch to node creation mode | 188 | `currentMode`, `edgeModeBtn` |
-| `homeNodeModeBtn` | button | Switch to home node mode | 189 | `currentMode='home'` |
-| `drainageNodeModeBtn` | button | Switch to drainage node mode | 190 | `currentMode='drainage'` |
-| `issueNodeModeBtn` | button | Switch to issue node mode | 191 | `currentMode='issue'` |
-| `edgeModeBtn` | button | Switch to edge creation mode | 192 | `currentMode='edge'` |
-| `nodeTypeFlyoutBtn` | button | Toggle node type flyout menu | 193 | `nodeTypeFlyout`, `syncFlyoutIcon()` |
-| `nodeTypeFlyout` | layout | Node type selection popup | 194 | `closeFlyout()`, `toggleFlyout()` |
-| `undoBtn` | button | Trigger undo | 195 | `performUndo()` |
-| `redoBtn` | button | Trigger redo | 196 | `performRedo()` |
-| `threeDViewBtn` | button | Open 3D visualization | 197 | `open3DView()` |
-| `exportNodesBtn` | button | Export nodes CSV | 199 | `csv.js` |
-| `exportEdgesBtn` | button | Export edges CSV | 200 | `csv.js` |
-| `exportSketchBtn` | button | Export sketch JSON | 202 | `sketch-io.js` |
-| `importSketchBtn` | button | Import sketch JSON | 203 | `importSketchFile` |
-| `importSketchFile` | input(file) | File picker for sketch import | 204 | `importSketchFromJson()` |
-| `exportMenuBtn` | button | Toggle export dropdown | 206 | `exportDropdown` |
-| `exportDropdown` | layout | Export options dropdown | 207 | dropdown menu |
-| `detailsContainer` | layout | Node/edge details sidebar content | 208 | `renderDetails()` |
-| `startPanel` | layout/panel | New sketch form panel | 209 | `newSketchBtn`, `startBtn` |
-| `homePanel` | layout/panel | Sketch list home panel | 210 | `renderHome()`, `hideHome()` |
-| `sketchList` (as `sketchListEl`) | layout | Sketch card list container | 211 | `renderHome()` |
-| `createFromHomeBtn` | button | Create sketch from home panel | 212 | shows `startPanel` |
-| `dateInput` | input | New sketch date picker | 213 | `newSketch()` |
-| `startBtn` | button | Confirm new sketch creation | 214 | `newSketch()` |
-| `cancelBtn` | button | Cancel new sketch creation | 215 | hides `startPanel` |
-| `helpBtn` | button | Opens help modal | 216 | `helpModal` |
-| `autosaveToggle` | input(checkbox) | Toggle autosave | 217 | `autosaveEnabled` |
-| `saveBtn` | button | Manual save | 218 | `saveToLibrary()` |
-| `helpModal` | layout/modal | Help overlay | 220 | `closeHelpBtn` |
-| `closeHelpBtn` | button | Close help modal | 221 | `helpModal` |
-| `toast` (as `toastEl`) | layout | Toast notification element | 222 | `showToast()` |
-| `zoomInBtn` / `zoomOutBtn` | button | Desktop zoom controls | 223-224 | `setZoom()` |
-| `recenterBtn` | button | Recenter on sketch | 225 | `recenterView()` |
-| `recenterDensityBtn` | button | Center on densest area | 226 | `recenterDensityView()` |
-| `sizeIncreaseBtn` / `sizeDecreaseBtn` | button | Node/font size scale | 227-228 | `increaseSizeScale()` / `decreaseSizeScale()` |
-| `autoSizeBtn` | button | Toggle constant screen size | 229 | `toggleAutoSize()` |
-| `appTitle` (as `appTitleEl`) | layout | App title h1 | 230 | i18n |
-| `sketchNameDisplay` / `sketchNameDisplayMobile` | layout | Sketch name in header | 231-232 | `updateSketchNameDisplay()` |
-| `sidebar` (as `sidebarEl`) | layout/panel | Details drawer panel | 235 | `closeSidebarPanel()` |
-| `sidebarCloseBtn` | button | Close details drawer | 236 | `closeSidebarPanel()` |
-| `langSelect` | select | Language dropdown (he/en) | 243 | language switching |
-| `adminBtn` / `mobileAdminBtn` | button | Navigate to admin | 245/247 | `navigateToAdmin()` |
-| `projectsBtn` / `mobileProjectsBtn` | button | Navigate to projects | 246/248 | `navigateToProjects()` |
-| `adminModal` | layout/modal | Admin settings modal | 249 | `openAdminModal()`, `closeAdminModal()` |
-| `adminScreen` | layout/panel | Full-screen admin panel | 258 | `openAdminScreen()` |
-| `projectsScreen` | layout/panel | Projects settings screen | 269 | `openProjectsScreen()` |
-| `main` (as `mainEl`) | layout | Main canvas container | 266 | hidden when admin/projects open |
-| `mobileMenuBtn` | button | Open mobile hamburger menu | 277 | `mobileMenu` |
-| `mobileMenu` | layout/panel | Mobile slide-out menu | 278 | `closeMobileMenu()` |
-| `mobileMenuCloseBtn` | button | Close mobile menu | 279 | `mobileMenu` |
-| `mobileMenuBackdrop` | layout | Backdrop overlay | 280 | `mobileMenu` |
-| `finishWorkdayBtn` / `mobileFinishWorkdayBtn` | button | Open finish workday flow | 310-311 | `showFinishWorkdayModal()` |
-| `finishWorkdayModal` | layout/modal | Finish workday dialog | 312 | `closeFinishWorkdayModal()` |
-| `importCoordinatesBtn` | button | Trigger coord CSV import | 322 | `handleCoordinatesImport()` |
-| `coordinatesToggle` | input(checkbox) | Toggle coordinate display | 323 | `toggleCoordinates()` |
-| `liveMeasureToggle` / `mobileLiveMeasureToggle` | input(checkbox) | Toggle GNSS live measure | 352-353 | `setLiveMeasureMode()` |
-| `mapLayerToggle` / `mobileMapLayerToggle` | input(checkbox) | Toggle map tiles | 355-356 | `toggleMapLayer()` |
-| `loginPanel` | layout/panel | Login/auth panel | 1065 | `showLoginPanel()`, `hideLoginPanel()` |
-| `authContainer` | layout | React auth mount point | 1067 | `mountSignIn()`, `mountSignUp()` |
-| `syncStatusBar` | layout | Sync status indicator | 2550 | `updateSyncStatusUI()` |
-| `gpsQuickCaptureBtn` | button | Quick GPS capture FAB | 11372 | `gpsQuickCapture()` |
-| `searchNodeInput` / `mobileSearchNodeInput` | input | Node ID search | 12094-12095 | `searchAndCenterNode()` |
-| `searchAddressInput` / `mobileSearchAddressInput` | input | Address search | 12140-12141 | `searchAddressAndCenter()` |
-| `zoomToFitBtn` | button | Fit all nodes in view | 12003 | `zoomToFit()` |
-| `edgeLegend` / `edgeLegendToggle` | layout | Edge type color legend | ~5550 | `renderEdgeLegend()` |
-| `canvasEmptyState` | layout | Empty sketch overlay | ~6331 | `updateCanvasEmptyState()` |
-| `surveyConnectionBadge` | layout | TSC3 connection badge | ~12726 | TSC3 status |
+| `graphCanvas` (as `canvas`) | layout/canvas | Main drawing surface | main.js:181 | `ctx`, `draw()`, all pointer handlers |
+| `newSketchBtn` | button | Creates new sketch | main.js:183 | `newSketch()`, `startPanel` |
+| `homeBtn` | button | Opens home/sketch list panel | main.js:184 | `renderHome()` |
+| `nodeModeBtn` | button | Switch to node creation mode | main.js:185 | `currentMode`, `edgeModeBtn` |
+| `homeNodeModeBtn` | button | Switch to home node mode | main.js:186 | `currentMode='home'` |
+| `drainageNodeModeBtn` | button | Switch to drainage node mode | main.js:187 | `currentMode='drainage'` |
+| `issueNodeModeBtn` | button | Switch to issue node mode | main.js:188 | `currentMode='issue'` |
+| `edgeModeBtn` | button | Switch to edge creation mode | main.js:189 | `currentMode='edge'` |
+| `nodeTypeFlyoutBtn` | button | Toggle node type flyout menu | main.js:190 | `nodeTypeFlyout`, `syncFlyoutIcon()` (project-ui.js:90) |
+| `nodeTypeFlyout` | layout | Node type selection popup | main.js:191 | `closeFlyout()` (project-ui.js:103) |
+| `undoBtn` | button | Trigger undo | main.js:192 | `performUndo()` |
+| `redoBtn` | button | Trigger redo | main.js:193 | `performRedo()` |
+| `threeDViewBtn` | button | Open 3D visualization | main.js:194 | `open3DView()` |
+| `exportNodesBtn` | button | Export nodes CSV | main.js:196 | `csv.js` |
+| `exportEdgesBtn` | button | Export edges CSV | main.js:197 | `csv.js` |
+| `exportSketchBtn` | button | Export sketch JSON | main.js:199 | `sketch-io.js` |
+| `importSketchBtn` | button | Import sketch JSON | main.js:200 | `importSketchFile` |
+| `importSketchFile` | input(file) | File picker for sketch import | main.js:201 | `importSketchFromJson()` |
+| `exportMenuBtn` | button | Toggle export dropdown | main.js:203 | `exportDropdown` |
+| `exportDropdown` | layout | Export options dropdown | main.js:204 | dropdown menu |
+| `detailsContainer` | layout | Node/edge details sidebar content | main.js:205 | `renderDetails()` (details-panel.js) |
+| `startPanel` | layout/panel | New sketch form panel | main.js:206 | `newSketchBtn`, `startBtn` |
+| `homePanel` | layout/panel | Sketch list home panel | main.js:207 | `renderHome()`, `hideHome()` (home-renderer.js) |
+| `sketchList` (as `sketchListEl`) | layout | Sketch card list container | main.js:208 | `renderHome()` |
+| `createFromHomeBtn` | button | Create sketch from home panel | main.js:209 | shows `startPanel` |
+| `dateInput` | input | New sketch date picker | main.js:210 | `newSketch()` |
+| `startBtn` | button | Confirm new sketch creation | main.js:211 | `newSketch()` |
+| `cancelBtn` | button | Cancel new sketch creation | main.js:212 | hides `startPanel` |
+| `helpBtn` | button | Opens help modal | main.js:213 | `helpModal` |
+| `autosaveToggle` | input(checkbox) | Toggle autosave | main.js:214 | `autosaveEnabled` |
+| `saveBtn` | button | Manual save | main.js:215 | `saveToLibrary()` (library-manager.js) |
+| `helpModal` | layout/modal | Help overlay | main.js:217 | `closeHelpBtn` |
+| `closeHelpBtn` | button | Close help modal | main.js:218 | `helpModal` |
+| `toast` (as `toastEl`) | layout | Toast notification element | main.js:219 | `showToast()` (now snackbar-backed, see §24) |
+| `zoomInBtn` / `zoomOutBtn` | button | Desktop zoom controls | main.js:220-221 | `setZoom()` (view-utils.js) |
+| `recenterBtn` | button | Recenter on sketch | main.js:222 | `recenterView()` (view-utils.js) |
+| `recenterDensityBtn` | button | Center on densest area | main.js:223 | `recenterDensityView()` (view-utils.js:347) |
+| `sizeIncreaseBtn` / `sizeDecreaseBtn` | button | Node/font size scale | main.js:224-225 | `increaseSizeScale()` / `decreaseSizeScale()` (toolbar-events.js:42/56) |
+| `autoSizeBtn` | button | Toggle constant screen size | main.js:226 | `toggleAutoSize()` (toolbar-events.js:85) |
+| `appTitle` (as `appTitleEl`) | layout | App title h1 | main.js:227 | i18n (`applyLangToStaticUI()`, i18n-ui.js:26) |
+| `sketchNameDisplay` / `sketchNameDisplayMobile` | layout | Sketch name in header | main.js:228-229 | `updateSketchNameDisplay()` (app-utils.js:91) |
+| `sidebar` (as `sidebarEl`) | layout/panel | Details drawer panel | main.js:232 | `closeSidebarPanel()` (details-panel.js:1799) |
+| `sidebarCloseBtn` | button | Close details drawer | main.js:233 | `closeSidebarPanel()` |
+| `langSelect` | select | Language dropdown (he/en) | main.js:240 | language switching (toolbar-events.js) |
+| `adminBtn` / `mobileAdminBtn` | button | Navigate to admin | main.js:242/244 | `navigateToAdmin()` (admin-handlers.js:361) |
+| `projectsBtn` / `mobileProjectsBtn` | button | Navigate to projects | main.js:243/245 | `navigateToProjects()` (admin-handlers.js:351) |
+| `adminModal` | layout/modal | Admin settings modal | main.js:246 | `openAdminModal()` / `closeAdminModal()` (admin-handlers.js:44/73) |
+| `adminScreen` | layout/panel | Full-screen admin panel | main.js:255 | `openAdminScreen()` (admin-handlers.js:83) |
+| `projectsScreen` | layout/panel | Projects settings screen | main.js:266 | `openProjectsScreen()` (admin-handlers.js:311) |
+| `main` (as `mainEl`) | layout | Main canvas container | main.js:263 | hidden when admin/projects open |
+| `mobileMenuBtn` | button | Open mobile hamburger menu | main.js:274 | `mobileMenu` |
+| `mobileMenu` | layout/panel | Mobile slide-out menu | main.js:275 | `closeMobileMenu()` (mobile-menu.js:49) |
+| `mobileMenuCloseBtn` | button | Close mobile menu | main.js:276 | `mobileMenu` |
+| `mobileMenuBackdrop` | layout | Backdrop overlay | main.js:277 | `mobileMenu` |
+| `finishWorkdayBtn` / `mobileFinishWorkdayBtn` | button | Open finish workday flow | finish-workday.js:20-21 | `showFinishWorkdayModal()` (finish-workday.js:44) |
+| `finishWorkdayModal` | layout/modal | Finish workday dialog | finish-workday.js:22 | `closeFinishWorkdayModal()` (finish-workday.js:113) |
+| `importCoordinatesBtn` | button | Trigger coord CSV import | coordinate-handlers.js:974 | `handleCoordinatesImport()` |
+| `coordinatesToggle` | input(checkbox) | Toggle coordinate display | coordinate-handlers.js:406 | `toggleCoordinates()` |
+| `liveMeasureToggle` / `mobileLiveMeasureToggle` | input(checkbox) | Toggle GNSS live measure | gnss-handlers.js:99-100 | `setLiveMeasureMode()` |
+| `mapLayerToggle` / `mobileMapLayerToggle` | input(checkbox) | Toggle map tiles | coordinate-handlers.js:440-441 | `toggleMapLayer()` |
+| `loginPanel` | layout/panel | Login/auth panel | auth-ui.js:24 | `showLoginPanel()` / `hideLoginPanel()` (auth-ui.js:69/84) |
+| `authContainer` | layout | React auth mount point | auth-ui.js:26 | `mountAuthSignIn()` / `mountAuthSignUp()` (auth-ui.js:108/115) |
+| `syncStatusBar` | layout | Sync status indicator | library-manager.js:425 | `updateSyncStatusUI()` (library-manager.js:432) |
+| `gpsQuickCaptureBtn` | button | Quick GPS capture FAB | gnss-handlers.js:108 | `gpsQuickCapture()` |
+| `searchNodeInput` / `mobileSearchNodeInput` | input | Node ID search | view-utils.js:483 | `searchAndCenterNode()` |
+| `searchAddressInput` / `mobileSearchAddressInput` | input | Address search | view-utils.js:529 | `searchAddressAndCenter()` (view-utils.js:417) |
+| `zoomToFitBtn` | button | Fit all nodes in view | view-utils.js:475 | `zoomToFit()` |
+| `edgeLegend` / `edgeLegendToggle` | layout | Edge type color legend | canvas-draw.js:734-735 | `renderEdgeLegend()` (canvas-draw.js:733) |
+| `canvasEmptyState` | layout | Empty sketch overlay | canvas-draw.js:1510 | `updateCanvasEmptyState()` (canvas-draw.js:1509) |
+| `surveyConnectionBadge` | layout | TSC3 connection badge | tsc3-handlers.js:292 | TSC3 status |
 
 ### 1.2 State Variables
 
-| object_id | Type | How/When | Line | Related |
+Declared in `main.js`, bridged to extracted modules through the `S` proxy (`shared-state.js`) — modules read/write `S.nodes`, `S.viewScale`, etc.
+
+| object_id | Type | How/When | Where | Related |
 |---|---|---|---|---|
-| `nodes` | array | All nodes in current sketch | 400 | `createNode`, `deleteNodeShared` |
-| `edges` | array | All edges in current sketch | 401 | `createEdge`, `deleteEdgeShared` |
-| `nextNodeId` | number | Auto-incrementing node ID | 402 | `createNode` |
-| `selectedNode` | object/null | Currently selected node | 403 | `renderDetails()` |
-| `selectedEdge` | object/null | Currently selected edge | 404 | `renderDetails()` |
-| `isDragging` | boolean | Node drag in progress | 405 | pointer handlers |
-| `currentMode` | string | `'node'`/`'home'`/`'drainage'`/`'issue'`/`'edge'` | 434 | mode buttons |
-| `pendingEdgeTail` | object/null | First node of edge being created | 435 | edge creation |
-| `currentSketchId` | string/null | Library ID of current sketch | 439 | sync, save |
-| `currentSketchName` | string/null | Human-friendly sketch name | 440 | header display |
-| `currentProjectId` | string/null | Project ID for current sketch | 441 | project canvas |
-| `autosaveEnabled` | boolean | Autosave toggle state | 444 | save flow |
-| `currentLang` | string | `'he'` or `'en'` | 459 | i18n |
-| `viewScale` | number | Zoom level (0.005-5.0) | 465 | rendering |
-| `viewTranslate` | {x,y} | Pan offset | 467 | rendering |
-| `viewStretchX` / `viewStretchY` | number | Canvas stretch factors | 472-473 | rendering |
-| `sizeScale` | number | Node/font size multiplier | 479 | rendering |
-| `autoSizeEnabled` | boolean | Constant-screen-size mode | 480 | rendering |
-| `coordinatesMap` | Map | Map<nodeId, {x,y,z}> ITM coords | 595 | coordinate display |
-| `coordinatesEnabled` | boolean | Coordinate display toggle | 596 | `toggleCoordinates` |
-| `coordinateScale` | number | Pixels per meter (default 50) | 599 | coordinate transforms |
-| `liveMeasureEnabled` | boolean | GNSS tracking active | 603 | GPS features |
-| `mapLayerEnabled` | boolean | Map tile layer toggle | 607 | map tiles |
-| `adminConfig` | object | Admin configuration | 699 | field options, defaults |
-| `nodeMap` | Map | Fast node lookup Map<id, node> | 548 | all node lookups |
-| `undoStack` / `redoStack` | array | Undo/redo history (max 50) | 416-417 | `performUndo`, `performRedo` |
-| `homeMode` | string | `'projects'` or `'sketches'` | 2822 | home panel tabs |
+| `S` | proxy object | Shared state proxy for all extracted modules | shared-state.js:33 | `bridgedProperty()`, AppStore |
+| `F` | registry object | Cross-module function registry (`F.scheduleDraw()`, `F.reverseEdge()`, …) | shared-state.js:36 | populated in main.js `init()` |
+| `nodes` | array | All nodes in current sketch | main.js:378 | `createNode`, `deleteNodeShared` |
+| `edges` | array | All edges in current sketch | main.js:379 | `createEdge`, `deleteEdgeShared` |
+| `nextNodeId` | number | Auto-incrementing node ID | main.js:380 | `createNode` |
+| `selectedNode` | object/null | Currently selected node | main.js:381 | `renderDetails()` |
+| `selectedEdge` | object/null | Currently selected edge | main.js:382 | `renderDetails()` |
+| `isDragging` | boolean | Node drag in progress | main.js:383 | pointer handlers |
+| `currentMode` | string | `'node'`/`'home'`/`'drainage'`/`'issue'`/`'edge'` | main.js:404 | mode buttons |
+| `pendingEdgeTail` | object/null | First node of edge being created | main.js:405 | edge creation |
+| `currentSketchId` | string/null | Library ID of current sketch | main.js:409 | sync, save |
+| `currentSketchName` | string/null | Human-friendly sketch name | main.js:410 | header display |
+| `currentProjectId` | string/null | Project ID for current sketch | main.js:411 | project canvas |
+| `autosaveEnabled` | boolean | Autosave toggle state | main.js:414 | save flow |
+| `currentLang` | string | `'he'` or `'en'` | main.js:420 | i18n |
+| `viewScale` | number | Zoom level (0.001-5.0) | main.js:426 | rendering |
+| `viewTranslate` | {x,y} | Pan offset | main.js:428 | rendering |
+| `viewStretchX` / `viewStretchY` | number | Canvas stretch factors | main.js:433-434 | rendering |
+| `sizeScale` | number | Node/font size multiplier | main.js:440 | rendering |
+| `autoSizeEnabled` | boolean | Constant-screen-size mode | main.js:441 | rendering |
+| `nodeMap` | Map | Fast node lookup Map<id, node> | main.js:492 | all node lookups |
+| `coordinatesMap` | Map | Map<nodeId, {x,y,z}> ITM coords | main.js:526 | coordinate display |
+| `coordinatesEnabled` | boolean | Coordinate display toggle | main.js:527 | `toggleCoordinates` |
+| `coordinateScale` | number | Pixels per meter (default 50) | main.js:530 | coordinate transforms |
+| `liveMeasureEnabled` | boolean | GNSS tracking active | main.js:534 | GPS features |
+| `mapLayerEnabled` | boolean | Map tile layer toggle | main.js:538 | map tiles |
+| `adminConfig` | object | Admin configuration | main.js:550 | `loadAdminConfig()` (app-utils.js:311) |
+| `undoStack` / `redoStack` | array | Undo/redo history (max 50) | main.js:394-395 | `performUndo`, `performRedo` |
+| `homeMode` | string | `'projects'` or `'sketches'` | home-renderer.js:54 | home panel tabs, `getHomeMode()` |
 
 ### 1.3 Core Functions
 
-| object_id | Type | Parameters | When | Line | Related |
+| object_id | Type | Parameters | When | Where | Related |
 |---|---|---|---|---|---|
-| `createNode(x, y)` | function | canvas coords | Node/home/drainage/issue mode click | 3952 | `pushUndo`, `saveToStorage` |
-| `createEdge(tailId, headId, options)` | function | node IDs | Edge mode click on two nodes | 4022 | `pushUndo`, `saveToStorage` |
-| `createDanglingEdge(tailId, endX, endY)` | function | tail + endpoint | Edge mode click empty space | 4086 | dangling edges |
-| `deleteNodeShared(node, pushToUndo, skipConfirm)` | function | node object | Delete/Backspace, context menu | 4333 | connected edges cleanup |
-| `deleteEdgeShared(edge, pushToUndo, skipConfirm)` | function | edge object | Delete button | 4424 | undo stack |
-| `connectDanglingEdge(edge, nodeId, type)` | function | dangling edge + target | Auto-connect on node creation | 4980 | dangling endpoint logic |
-| `normalizeLegacySketch(nodes, edges)` | function | arrays | On every sketch load | 1824 | data migration |
-| `computeNodeTypes()` | function | none | After node/edge changes | 5638 | node type inference |
-| `loadFromStorage()` | function | none | App init | 1971 | localStorage |
-| `saveToStorage()` | function | none | After every data change | 2021 | localStorage + IDB |
-| `saveToLibrary()` | function | none | On save/autosave | 2280 | cloud sync |
-| `loadFromLibrary(sketchId)` | function | sketch ID | Opening a sketch | 2333 | data loading |
-| `deleteFromLibrary(sketchId)` | function | sketch ID | Delete action | 2504 | cleanup |
-| `draw()` | function | none | Main render loop (rAF) | 5051 | all rendering |
-| `scheduleDraw()` | function | none | Debounced redraw | 6350 | rAF scheduling |
-| `drawEdge(edge)` | function | edge object | Per-edge in `draw()` | 5665 | edge rendering |
-| `drawEdgeLabels(edge)` | function | edge object | Measurement/length labels | 6025 | label rendering |
-| `drawNode(node)` | function | node object | Per-node in `draw()` | 6166 | node rendering |
-| `drawInfiniteGrid(w, h)` | function | canvas dimensions | Background grid | 5568 | grid rendering |
-| `renderDetails()` | function | none | When selection changes | 6750 | sidebar form builder |
-| `renderHome()` | function | none | Shows sketch list | 2831 | home panel |
-| `renderProjectsHome()` | function | none | Shows project cards | 3303 | project list |
-| `hideHome(immediate)` | function | boolean | Close home panel | 3240 | panel animation |
-| `handleRoute()` | function | none | Hash routing | 1177 | `#/admin`, `#/projects`, etc. |
-| `setZoom(newScale)` | function | scale number | Zoom buttons, keyboard | 11839 | viewScale |
-| `recenterView()` | function | none | Center on sketch | 11878 | viewTranslate |
-| `zoomToFit()` | function | none | Fit all nodes | 11891 | bounding box |
-| `centerOnNode(node)` | function | node object | Navigate to node | 6421 | viewTranslate |
-| `centerOnGpsLocation(lat, lon)` | function | WGS84 | Center on GPS | 12588 | map reference |
-| `searchAndCenterNode(searchId)` | function | string/number | Node search | 12014 | `centerOnNode` |
-| `screenToWorld(x, y)` | function | screen coords | Convert screen to world | 11785 | coordinate transform |
-| `pointerDown(x, y)` | function | screen coords | Mouse/touch down | 8339 | input handling |
-| `pointerMove(x, y)` | function | screen coords | Mouse/touch move | 8564 | input handling |
-| `pointerUp()` | function | none | Mouse/touch up | 8619 | input handling |
-| `findNodeAt(x, y)` | function | world coords | Hit-test nodes | 8216 | click detection |
-| `findEdgeAt(x, y, threshold)` | function | world coords | Hit-test edges | 8286 | click detection |
-| `pushUndo(action)` | function | action object | After create/move/delete | 4280 | undo stack |
-| `performUndo()` | function | none | Ctrl+Z, undo button | 4465 | undo/redo |
-| `performRedo()` | function | none | Ctrl+Shift+Z | 4646 | undo/redo |
-| `handleCoordinatesImport(file)` | function | File | CSV coordinate import | 10391 | coordinate system |
-| `toggleCoordinates(enabled)` | function | boolean | Coordinate toggle | 10603 | coordinate display |
-| `toggleMapLayer(enabled)` | function | boolean | Map layer toggle | 10655 | map tiles |
-| `setLiveMeasureMode(enabled)` | function | boolean | Live Measure toggle | 12261 | GNSS |
-| `gpsQuickCapture()` | function | none | Quick capture FAB | 12461 | GPS node creation |
-| `showFinishWorkdayModal()` | function | none | Workday finish flow | 10165 | dangling edge resolution |
-| `loadProjectCanvas(projectId)` | function | UUID | `#/project/:id` route | 3622 | project canvas |
-| `showNodeContextMenu(node, x, y)` | function | node + screen coords | Long-press/double-tap | 4196 | context menu |
-| `init()` | function | none | App entry point | 12169 | everything |
+| `newSketch(date, projectId, inputFlowConfig)` | function | date + optional project | New sketch creation | graph-crud.js:35 | `startBtn` |
+| `createNode(x, y)` | function | canvas coords | Node/home/drainage/issue mode click | graph-crud.js:68 | `pushUndo`, `saveToStorage` |
+| `createEdge(tailId, headId, options)` | function | node IDs | Edge mode click on two nodes | graph-crud.js:145 | `pushUndo`, `saveToStorage` |
+| `reverseEdge(edgeId, options)` | function | edge ID + `{directionSource}` | Flip tail/head (CONNECT screen flip-offer, wizard, undo) — stamps `direction_source`, pushes self-inverse `'edgeReverse'` undo action, triggers gradient recheck | graph-crud.js:221 | `F.reverseEdge` (main.js:1807), undo-redo.js:417/582, gradient-engine |
+| `createDanglingEdge(tailId, endX, endY)` | function | tail + endpoint | Edge mode click empty space | graph-crud.js:250 | dangling edges |
+| `createInboundDanglingEdge(startX, startY, headId)` | function | endpoint + head | Inbound dangling edge | graph-crud.js:257 | dangling edges |
+| `deleteNodeShared(node, pushToUndo, skipConfirm)` | function | node object | Delete/Backspace, context menu | undo-redo.js:93 | connected edges cleanup |
+| `deleteEdgeShared(edge, pushToUndo, skipConfirm)` | function | edge object | Delete button | undo-redo.js:203 | undo stack |
+| `connectDanglingEdge(edge, nodeId, type)` | function | dangling edge + target | Auto-connect on node creation | undo-redo.js:807 | dangling endpoint logic |
+| `normalizeLegacySketch(nodes, edges)` | function | arrays | On every sketch load | storage-manager.js:85 | data migration |
+| `computeNodeTypes()` | function | none | After node/edge changes | canvas-draw.js:828 | node type inference |
+| `loadFromStorage()` | function | none | App init | storage-manager.js:245 | localStorage |
+| `saveToStorage()` | function | none | After every data change | storage-manager.js:296 | localStorage + IDB |
+| `saveToLibrary()` | function | none | On save/autosave | library-manager.js:161 | cloud sync |
+| `loadFromLibrary(sketchId)` | function | sketch ID | Opening a sketch | library-manager.js:214 | data loading |
+| `deleteFromLibrary(sketchId)` | function | sketch ID | Delete action | library-manager.js:379 | cleanup |
+| `draw()` | function | none | Main render loop (rAF) | canvas-draw.js:117 | all rendering |
+| `scheduleDraw()` | function | none | Debounced redraw | canvas-draw.js:1530 | rAF scheduling |
+| `drawEdge(edge)` | function | edge object | Per-edge in `draw()` | canvas-draw.js:850 | edge rendering |
+| `drawEdgeLabels(edge)` | function | edge object | Measurement/length labels | canvas-draw.js:1206 | label rendering |
+| `drawNode(node)` | function | node object | Per-node in `draw()` | canvas-draw.js:1340 | node rendering |
+| `drawInfiniteGrid(w, h, isSchematicView)` | function | canvas dimensions | Background grid | canvas-draw.js:748 | grid rendering |
+| `renderDetails()` | function | none | When selection changes | details-panel.js:285 | sidebar form builder |
+| `renderHome()` | function | none | Shows sketch list | home-renderer.js:195 | home panel |
+| `renderProjectsHome()` | function | none | Shows project cards | home-renderer.js:511 | project list |
+| `hideHome(immediate)` | function | boolean | Close home panel | home-renderer.js:440 | panel animation |
+| `handleRoute()` | function | none | Hash routing | auth-ui.js:143 | `#/admin`, `#/projects`, etc. |
+| `setZoom(newScale)` | function | scale number | Zoom buttons, keyboard | view-utils.js:202 | viewScale |
+| `recenterView()` | function | none | Center on sketch | view-utils.js:244 | viewTranslate |
+| `zoomToFit()` | function | none | Fit all nodes | view-utils.js:257 | bounding box |
+| `centerOnNode(node)` | function | node object | Navigate to node | graph-crud.js:389 | viewTranslate |
+| `centerOnGpsLocation(lat, lon)` | function | WGS84 | Center on GPS | gnss-handlers.js:433 | map reference |
+| `searchAndCenterNode(searchId)` | function | string/number | Node search | view-utils.js:360 | `centerOnNode` |
+| `screenToWorld(x, y)` | function | screen coords | Convert screen to world | view-utils.js:147 | coordinate transform |
+| `pointerDown(x, y)` | function | screen coords | Mouse/touch down | pointer-handlers.js:269 | input handling |
+| `pointerMove(x, y)` | function | screen coords | Mouse/touch move | pointer-handlers.js:558 | input handling |
+| `pointerUp()` | function | none | Mouse/touch up | pointer-handlers.js:653 | input handling |
+| `findNodeAt(x, y)` | function | world coords | Hit-test nodes | pointer-handlers.js:116 | click detection |
+| `findEdgeAt(x, y, threshold)` | function | world coords | Hit-test edges | pointer-handlers.js:159 | click detection |
+| `pushUndo(action)` | function | action object | After create/move/delete | undo-redo.js:21 | undo stack |
+| `performUndo()` | function | none | Ctrl+Z, undo button — handles `'edgeReverse'` (self-inverse) among action types | undo-redo.js:235 | undo/redo |
+| `performRedo()` | function | none | Ctrl+Shift+Z — `'edgeReverse'` branch at undo-redo.js:582 | undo-redo.js:445 | undo/redo |
+| `handleCoordinatesImport(file)` | function | File | CSV coordinate import | coordinate-handlers.js:132 | coordinate system |
+| `toggleCoordinates(enabled)` | function | boolean | Coordinate toggle | coordinate-handlers.js:366 | coordinate display |
+| `toggleMapLayer(enabled)` | function | boolean | Map layer toggle | coordinate-handlers.js:419 | map tiles |
+| `setLiveMeasureMode(enabled)` | function | boolean | Live Measure toggle | gnss-handlers.js:54 | GNSS |
+| `gpsQuickCapture()` | function | none | Quick capture FAB | gnss-handlers.js:287 | GPS node creation |
+| `showFinishWorkdayModal()` | function | none | Workday finish flow | finish-workday.js:44 | dangling edge resolution |
+| `loadProjectCanvas(projectId)` | function | UUID | `#/project/:id` route | home-renderer.js:832 | project canvas |
+| `showNodeContextMenu(node, x, y)` | function | node + screen coords | Long-press/double-tap | pointer-handlers.js:195 | context menu |
+| `handleTSC3PointReceived(pointName, coords, isNew, nodeType)` | function | survey point | TSC3 point arrival — updates/creates node, notifies field-stepper | tsc3-handlers.js:37 | `notifyStepperOfExternalNodeUpdate` (§20) |
+| `init()` | function | none | App entry point | main.js:1719 | everything |
 
-### 1.4 Window Globals (exposed by main.js)
+### 1.4 Window Globals (exposed by legacy modules)
 
-| object_id | Purpose | Line |
+Note: `__getSketchStats`, `__saveToStorage`, `__getViewState`, `__selectNodeById`, `__selectEdgeById`, `__onSketchIdChanged`, `__nodeMap`, `window.renderHome`, and `window.invalidateLibraryCache` are no longer defined — remaining call sites use optional chaining and silently no-op.
+
+| object_id | Purpose | Where |
 |---|---|---|
-| `window.__getActiveSketchData()` | Snapshot sketch state for switching | 3094 |
-| `window.__setActiveSketchData(data)` | Load sketch into globals | 3138 |
-| `window.__getSketchStats()` | Lightweight stats accessor | 3113 |
-| `window.__scheduleDraw()` | Trigger canvas redraw | 3167 |
-| `window.__saveToStorage()` | Trigger save | 3168 |
-| `window.__setViewState(scale, tx, ty)` | Set zoom/pan programmatically | 3176 |
-| `window.__getViewState()` | Read zoom/pan | 3187 |
-| `window.__getStretch()` | Read stretch factors | 3183 |
-| `window.__selectNodeById(nodeId)` | Select node by ID | 3194 |
-| `window.__selectEdgeById(edgeId)` | Select edge by ID | 3204 |
-| `window.__projectCanvas` | Project canvas API object | 3215 |
-| `window.__onSketchIdChanged(oldId, newId)` | Cloud sync ID update | 3229 |
-| `window.__nodeMap` | Fast node lookup Map | 3191 |
-| `window.__createNodeFromMeasurement` | GPS node creation | 12572 |
-| `window.handleRoute` | Hash router | 1331 |
-| `window.renderHome` | Re-render home panel | 3076 |
-| `window.invalidateLibraryCache` | Force library reload | 3074 |
-| `window.scheduleDraw` / `window.setZoom` / `window.zoomToFit` / `window.recenterView` | View control aliases | 12688-12691 |
-| `window.setLiveMeasureMode` / `window.openGnssPointCaptureDialog` / `window.centerOnGpsLocation` | GNSS aliases | 12693-12695 |
+| `window.__getActiveSketchData()` | Snapshot sketch state for switching | main.js:1948 |
+| `window.__setActiveSketchData(data)` | Load sketch into globals (resets gradient engine, undo stack) | main.js:1925 |
+| `window.__scheduleDraw()` | Trigger canvas redraw | main.js:1976 |
+| `window.__setViewState(scale, tx, ty)` | Set zoom/pan programmatically | main.js:1966 |
+| `window.getViewState()` | Read zoom/pan/stretch (no `__` prefix) | main.js:1918 |
+| `window.__getStretch()` | Read stretch factors | main.js:1975 |
+| `window.__projectCanvas` | Project canvas API object | main.js:1955 |
+| `window.__markInternalNavigation()` | Mark in-app hash change (required before programmatic navigation — exit guard) | main.js:1924 |
+| `window.__createNodeFromMeasurement` | GPS node creation | main.js:1923 |
+| `window.__sketchReadOnly` | Read-only mode flag (locked sketches) | library-manager.js:232 |
+| `window.handleRoute` | Hash router | auth-ui.js:341 |
+| `window.scheduleDraw` / `window.setZoom` / `window.zoomToFit` / `window.recenterView` | View control aliases | main.js:1914-1917 |
+| `window.setLiveMeasureMode` / `window.openGnssPointCaptureDialog` / `window.centerOnGpsLocation` / `window.toggleUserLocationTracking` | GNSS aliases | main.js:1919-1922 |
+| `window.loadProjectReferenceLayers` / `window.getReferenceLayers` / `window.setLayerVisibility` / `window.setRefLayersEnabled` / `window.isRefLayersEnabled` / `window.saveRefLayerSettings` | Reference-layer bridge | main.js:956-961 |
 
-### 1.5 Keyboard Shortcuts (line ~11607)
+### 1.5 Keyboard Shortcuts (main.js:1471, global `keydown` handler)
 
 | Key | Action |
 |---|---|
@@ -198,6 +209,8 @@
 | `E` | Edge mode |
 | `S` | Manual save |
 | `Space` (hold) | Pan canvas |
+| `Tab` / `Shift+Tab` | Cycle node/edge selection |
+| `Enter` | Open details drawer for selection |
 | `Escape` | Close modals/cancel/deselect |
 | `Delete`/`Backspace` | Delete selected |
 | `+`/`=` | Zoom in |
@@ -208,17 +221,17 @@
 
 ### 1.6 Constants
 
-| object_id | Value | Line |
+| object_id | Value | Where |
 |---|---|---|
-| `UNDO_STACK_MAX` | 50 | 415 |
-| `LONG_PRESS_MS` | 600 | 421 |
-| `DOUBLE_TAP_MS` | 300 | 427 |
-| `MIN_SCALE` / `MAX_SCALE` | 0.001 / 5.0 | 468-469 |
-| `SCALE_STEP` | 1.1 | 470 |
-| `MIN_STRETCH` / `MAX_STRETCH` | 0.2 / 3.0 | 474-475 |
-| `TOUCH_TAP_MOVE_THRESHOLD` | 5px | 501 |
-| `TOUCH_SELECT_EXPANSION` | 14px | 502 |
-| `SCALE_PRESETS` | [5,10,25,50,75,100,150,200,300] | 600 |
+| `UNDO_STACK_MAX` | 50 | undo-redo.js:17 (also main.js:393) |
+| `LONG_PRESS_MS` | 600 | pointer-handlers.js:20 |
+| `DOUBLE_TAP_MS` | 300 | pointer-handlers.js:21 |
+| `MIN_SCALE` / `MAX_SCALE` | 0.001 / 5.0 | main.js:429-430 (duplicated in pointer-handlers.js:22-23, view-utils.js:23-24, home-renderer.js:46-47) |
+| `SCALE_STEP` | 1.1 | main.js:431 (also mobile-menu.js:17) |
+| `MIN_STRETCH` / `MAX_STRETCH` | 0.2 / 3.0 | main.js:435-436 (also coordinate-handlers.js:61-62) |
+| `TOUCH_TAP_MOVE_THRESHOLD` | 5px | pointer-handlers.js:24 |
+| `TOUCH_SELECT_EXPANSION` | 14px | pointer-handlers.js:25 |
+| `SCALE_PRESETS` | [5,10,25,50,75,100,150,200,300] | main.js:531 (also coordinate-handlers.js:65) |
 
 ---
 
@@ -283,19 +296,19 @@
 
 | object_id | Type | How/When | Line | Related |
 |---|---|---|---|---|
-| `syncFromCloud()` | function | Full cloud-to-local sync | 447 | `fetchSketchesFromCloud` |
-| `syncSketchToCloud(sketch)` | function | Sync single sketch (create/update) | 786 | optimistic locking, 409 conflict |
-| `debouncedSyncToCloud(sketch)` | function | 2s debounced wrapper | 1071 | `syncSketchToCloud` |
-| `deleteSketchEverywhere(sketchId)` | function | Delete from IDB + cloud | 1098 | offline queue |
-| `acquireSketchLock(sketchId)` | function | POST lock action | 613 | `currentLock` |
-| `releaseSketchLock(sketchId)` | function | POST unlock action | 664 | `currentLock` |
-| `processSyncQueue()` | function | Drain offline queue | 1155 | `drainSyncQueue` |
-| `onSyncStateChange(callback)` | function | Subscribe to sync state | 214 | `syncStateListeners` |
-| `getSyncState()` | function | Read sync state | 1591 | `syncState` |
-| `deduplicateSketches(arr)` | function | Remove local dups of cloud sketches | 1358 | fingerprint |
-| `initSyncService()` | function | Setup online/offline + auth listeners | 1498 | `AbortController` |
-| `clearLocalSketchData()` | function | Clears all local data on logout | 1564 | IDB + localStorage |
-| `window.syncService` | object | Legacy access to all sync fns | 1597 | all exports |
+| `syncFromCloud()` | function | Full cloud-to-local sync | 714 | `fetchSketchesFromCloud` |
+| `syncSketchToCloud(sketch)` | function | Sync single sketch (create/update); all four 409 branches union measurement histories | 1053 | optimistic locking, 409 conflict, `mergeMeasurementHistories` (§23) |
+| `debouncedSyncToCloud(sketch)` | function | 2s debounced wrapper | 1343 | `syncSketchToCloud` |
+| `deleteSketchEverywhere(sketchId)` | function | Delete from IDB + cloud | 1370 | offline queue |
+| `acquireSketchLock(sketchId)` | function | POST lock action | 880 | `currentLock` |
+| `releaseSketchLock(sketchId)` | function | POST unlock action | 931 | `currentLock` |
+| `processSyncQueue()` | function | Drain offline queue | 1427 | `drainSyncQueue` |
+| `onSyncStateChange(callback)` | function | Subscribe to sync state | 481 | `syncStateListeners` |
+| `getSyncState()` | function | Read sync state | 1868 | `syncState` |
+| `deduplicateSketches(arr)` | function | Remove local dups of cloud sketches | 1635 | fingerprint |
+| `initSyncService()` | function | Setup online/offline + auth listeners | 1775 | `AbortController` |
+| `clearLocalSketchData()` | function | Clears all local data on logout | 1841 | IDB + localStorage |
+| `window.syncService` | object | Legacy access to all sync fns | 1874 | all exports |
 
 ---
 
@@ -586,13 +599,13 @@
 
 | object_id | Type | How/When | File:Line | Related |
 |---|---|---|---|---|
-| `tsc3Connection` | singleton | TSC3 connection manager | `tsc3-connection-manager.js:208` | all TSC3 ops |
-| `tsc3Connection.connectBluetooth(addr)` | method | Connect BT to TSC3 controller | 154 | `TSC3BluetoothAdapter` |
-| `tsc3Connection.connectWebSocket(host, port)` | method | Connect WS to TSC3 (port 8765) | 173 | `TSC3WebSocketAdapter` |
+| `tsc3Connection` | singleton | TSC3 connection manager | `tsc3-connection-manager.js:210` | all TSC3 ops |
+| `tsc3Connection.connectBluetooth(addr)` | method | Connect BT to TSC3 controller | 156 | `TSC3BluetoothAdapter` |
+| `tsc3Connection.connectWebSocket(host, port)` | method | Connect WS to TSC3 (port 8765) | 175 | `TSC3WebSocketAdapter` |
 | `TSC3BluetoothAdapter` | class | Bluetooth SPP for TSC3 (Capacitor) | `tsc3-bluetooth-adapter.js:36` | parser |
 | `TSC3WebSocketAdapter` | class | WebSocket bridge for TSC3 | `tsc3-websocket-adapter.js:13` | reconnect |
-| `parseSurveyLine(line)` | function | Parse survey CSV line (auto-detect format) | `tsc3-parser.js:45` | ITM heuristics |
-| `processDataChunk(chunk, state)` | function | Streaming parser with buffer | `tsc3-parser.js:108` | both adapters |
+| `parseSurveyLine(line)` | function | Parse survey CSV line (auto-detect format) | `tsc3-parser.js:46` | ITM heuristics |
+| `processDataChunk(chunk, state)` | function | Streaming parser with buffer | `tsc3-parser.js:113` | both adapters |
 | `openDevicePickerDialog(devices, t)` | function | Modal device picker → Promise | `device-picker-dialog.js:140` | BT connect |
 | `openSurveyNodeTypeDialog(name, coords, onChoose, ...)` | function | Node type selection for survey points | `survey-node-type-dialog.js:90` | Manhole/Home/Drainage |
 | `getSurveyAutoConnect()` | function | Auto-connect checkbox state | `survey-node-type-dialog.js:130` | edge creation |
@@ -939,4 +952,82 @@ Gamified field survey experience overlay — XP system, achievements, gestures, 
 
 ---
 
-*Total objects cataloged: ~2200+ across 90+ files*
+## 20. FIELD STEPPER — `src/field-stepper/field-stepper.js`
+
+Full-screen one-field-per-screen data entry overlay for a node + its edge depths (~10-12 taps vs ~24-26 in the legacy drawer). Additive — the legacy details drawer is untouched. Screen sequence: `[CONNECT?] → field screens → DEPTHS → COMPLETION` (`getScreenSequence()`, field-stepper.js:301).
+
+| object_id | Type | How/When | Where | Related |
+|---|---|---|---|---|
+| `initFieldStepper()` | function | Build overlay DOM once at app init (main-entry.js) | field-stepper.js:917 | `ensureOverlay` |
+| `openFieldStepper(node, {startField?})` | function | Open stepper for a node; blocked when `window.__sketchReadOnly`; opens on CONNECT screen if a live suggestion is pending | field-stepper.js:926 | `computeFieldOrder`, `validatePendingConnect` |
+| `closeFieldStepper()` | function | Close overlay (also Escape key) | field-stepper.js:945 | overlay state |
+| `isFieldStepperOpen()` | function | Check overlay open state | field-stepper.js:950 | — |
+| `getOpenStepperNodeId()` | function | ID of the node currently being edited (or null) | field-stepper.js:954 | TSC3 handlers |
+| `notifyStepperOfExternalNodeUpdate(node, pointName)` | function | TSC3 arrival hook (tsc3-handlers.js): closed → open fresh; same node → targeted header refresh only (no focus hijack); other node → actionable switch-to snackbar | field-stepper.js:968 | `handleTSC3PointReceived`, `showSnackbar` (§24) |
+| `setPendingConnectSuggestion(nodeId, suggestion)` | function | Queue a CONNECT screen for the node (falsy clears); re-renders live CONNECT screen on re-measure | field-stepper.js:280 | connection-suggest (§22) |
+| `getPendingConnectSuggestion(nodeId)` | function | Read pending suggestion | field-stepper.js:296 | — |
+| `CONNECT` screen | screen type | Prepended to the sequence when an ambiguous connection decision is pending (wizard Phase 1, spec §B3/B3a/B3b/B4b); direction cards via `connectDirCard()`, flip applies `F.reverseEdge(edgeId, {directionSource: 'terrain'})` | field-stepper.js:713 (`renderConnectScreen`), 668 (`resolveConnect`) | `reverseEdge` (graph-crud.js:221) |
+| `window.__openFieldStepper` | global | Non-module access to `openFieldStepper` | field-stepper.js:989 | legacy callers |
+
+---
+
+## 21. GRADIENT ENGINE — `src/features/gradient-engine.js`
+
+Live pipe-slope intelligence: computes the hydraulic gradient of every edge (flow = tail→head) the moment data arrives and alerts on uphill segments. Basis `'invert'` (elevations + both depths, authoritative) or `'terrain'` (elevations only, early warning). Statuses: `'negative'` / `'low'` / `'ok'` / `'unknown'` / `'exempt'`. Alerts fire only on status transitions per edge.
+
+| object_id | Type | How/When | Where | Related |
+|---|---|---|---|---|
+| `MIN_SLOPE_PCT` | constant (0.3) | Minimum acceptable slope % before a `'low'` warning (invert basis) | gradient-engine.js:30 | `computeEdgeGradient` |
+| `GRADIENT_EXEMPT_TYPES` | constant (Set: Home, ForLater, Issue) | Edges touching these node types return `'exempt'` (laterals legitimately rise) | gradient-engine.js:36 | — |
+| `elevationOf(node)` | function | Node elevation (surveyZ) or null | gradient-engine.js:39 | — |
+| `edgeLengthM(tailNode, headNode, coordinateScale)` | function | Edge length in meters (canvas dist / coordinateScale) | gradient-engine.js:53 | — |
+| `computeEdgeGradient(edge, nodeById, coordinateScale)` | function | Pure gradient computation → `{status, basis, drop, slopePct, lengthM}` | gradient-engine.js:81 | connection-suggest (§22) |
+| `evaluateEdge(edgeOrId, {notify})` | function | Compute + transition-gated alert (uphill snackbar with pan-to-edge action) | gradient-engine.js:242 | `notifyFor`, snackbar (§24) |
+| `onMeasurementApplied(nodeId)` / `onEdgeCreated(edgeOrId)` / `onDepthChanged(edgeOrId, delayMs)` / `onEdgeDeleted(edgeOrId)` | functions | Event hooks called by graph-crud / TSC3 / GNSS / details paths | gradient-engine.js:287/296/301/319 | legacy modules |
+| `recheckAll({notify})` / `getAlerts()` / `resetGradientState()` | functions | Bulk recheck, current alerts, clear per-sketch transition memory (called on sketch switch) | gradient-engine.js:331/336/348 | `window.__setActiveSketchData` |
+| `window.__gradientEngine` | global | Bridge for legacy modules and e2e tests (`compute`, `evaluateEdge`, `reset`, …) | gradient-engine.js:356 | all exports |
+
+---
+
+## 22. CONNECTION SUGGEST — `src/features/connection-suggest.js`
+
+Z-aware auto-connect decision engine (pure logic, no DOM) for GNSS/TSC3 measurement chains — decides how a newly measured node should connect to the previous one (docs/SMART_MEASUREMENT_WIZARD.md §B).
+
+| object_id | Type | How/When | Where | Related |
+|---|---|---|---|---|
+| `FLAT_TOL_M` | constant (0.05) | Elevation delta below which terrain is "flat" (no direction evidence) | connection-suggest.js:33 | `terrainEvidence` |
+| `LONG_EDGE_THRESHOLD_M` | constant (70) | Edges longer than this get `'ask'` instead of auto-connect | connection-suggest.js:35 | `suggestChainConnection` |
+| `findEdgeBetween(edges, aId, bId)` | function | Existing edge between two nodes (either direction) | connection-suggest.js:38 | — |
+| `suggestChainConnection(newNode, prevNode, {edges, coordinateScale})` | function | Returns a suggestion object; kinds: `'none'` (no action), `'exists'` (edge already there, correct direction), `'flip-offer'` (existing edge runs uphill — offer reverse), `'auto'` (confident downhill connect), `'auto-home'` (Home↔Manhole lateral, fixed direction), `'ask'` (ambiguous — CONNECT screen) | connection-suggest.js:72 | `computeEdgeGradient` (§21), CONNECT screen (§20) |
+
+---
+
+## 23. MEASUREMENT HISTORY — `src/utils/measurement-history.js`
+
+Append-only per-node field measurement history: every TSC3 shot / GNSS capture / coordinate import appends to `node.measurements` (persisted verbatim inside the sketches.nodes JSONB — no schema change). Entries keep full float precision; `elevation` is `null` when not measured (never 0). Active measurement stays surveyX/surveyY/surveyZ.
+
+| object_id | Type | How/When | Where | Related |
+|---|---|---|---|---|
+| `MEASUREMENT_HISTORY_CAP` | constant (20) | Cap policy: history trimmed to 20 entries keeping the original (first) + most recent | measurement-history.js:35 | `appendMeasurement` |
+| `buildMeasurementEntry(data)` | function | Normalize raw capture into an entry (`source`: 'tsc3'/'gnss'/'import'/'legacy'/'unknown') | measurement-history.js:48 | — |
+| `appendMeasurement(node, data, {cap})` | function | Append entry to `node.measurements` (dedup by key, cap-20) — call on every field capture | measurement-history.js:84 | TSC3/GNSS/import paths |
+| `backfillMeasurementFromNode(node)` | function | Seed history from a node's existing active measurement (legacy data) | measurement-history.js:110 | migration |
+| `sanitizeMeasurements(node)` | function | Validate/repair a node's history array | measurement-history.js:132 | load paths |
+| `mergeMeasurementHistories(localNodes, serverNodes, {cap})` | function | Union per-node histories — used by ALL four sync 409-conflict branches so conflict resolution never drops field shots | measurement-history.js:151 | sync-service (§2.6) |
+
+---
+
+## 24. SNACKBAR — `src/ui/snackbar.js`
+
+Action-capable snackbar/toast system; claims `window.showToast` before `utils/toast.js` loads, so every legacy `showToast` call site is upgraded transparently.
+
+| object_id | Type | How/When | Where | Related |
+|---|---|---|---|---|
+| `showSnackbar(opts)` | function | `{message, variant, channel, duration, actions: [{label, primary, onClick}]}` — queued, channel-deduped | snackbar.js:74 | field-stepper, gradient-engine |
+| `showStatus(message, channel)` | function | Lightweight status line (default channel 'status') | snackbar.js:290 | — |
+| `showToast(message, variantOrDuration, durationMs)` | function | Drop-in replacement for the legacy toast API | snackbar.js:306 | legacy call sites |
+| `window.showToast` / `window.showSnackbar` / `window.showStatus` | globals | Claimed at import time if not already defined | snackbar.js:320-323 | main-entry load order |
+
+---
+
+*Total objects cataloged: ~2250+ across 95+ files. Section 1 file:line references verified against the modularized `src/legacy/` on 2026-07-20; other sections' line numbers may drift — trust file attribution over exact lines.*

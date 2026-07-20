@@ -1,5 +1,7 @@
 # Manholes Mapper — Modern Landscape-First Redesign
 
+> **Historical design proposal** — the substance shipped (`cockpit/`, `field-commander/`, gamification), but routing/layout details diverged from what was built; see `APP_STRUCTURE.md` for the current structure.
+
 > A proposal for restructuring the app around landscape-oriented field work, with purposeful gamification that makes surveying faster, more reliable, and genuinely satisfying.
 
 ---

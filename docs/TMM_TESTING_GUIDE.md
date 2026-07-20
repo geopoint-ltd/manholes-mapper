@@ -127,7 +127,7 @@ The existing [user-location.js](src/map/user-location.js) will automatically:
 ### Location Options Already Configured
 
 ```javascript
-// From user-location.js line 17-21
+// From user-location.js line 20-24
 const LOCATION_OPTIONS = {
   enableHighAccuracy: true,  // ✅ Reads Trimble via TMM
   timeout: 10000,

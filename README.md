@@ -12,7 +12,7 @@ A professional, high-performance Progressive Web Application (PWA) for undergrou
 |---|---|
 | **Live Production** | https://manholes-mapper-three.vercel.app |
 | **Tech Stack** | Vanilla JS (ES Modules) + Vite 7 + Canvas 2D + Three.js + Leaflet + Better Auth + Neon Postgres |
-| **Test Suite** | **~1 790 unit tests** - all passing (`cd frontend && npx vitest run`) |
+| **Test Suite** | **~1 850 unit tests** - all passing (`cd frontend && npx vitest run`) |
 | **E2E Tests** | Playwright - `cd frontend && npx playwright test` |
 
 ### What Makes It Special
@@ -24,7 +24,7 @@ A professional, high-performance Progressive Web Application (PWA) for undergrou
 5. **Intelligent issue detection** - real-time sketch audit (missing coordinates, negative gradients, long edges, merge candidates) with in-canvas navigation to each issue.
 6. **Legacy data migration** - built-in Import Wizard converts pre-ITM-era sketches (old canvas JSON + ITM survey CSV) into fully geo-referenced sketches via BFS coordinate propagation. Menu → Sketch → "Import Legacy Sketch + Coordinates".
 7. **Multi-tenant SaaS backend** - organisations, projects, role-based access, sketch locking, feature flags - all on Vercel serverless + Neon Postgres.
-8. **Production-grade test suite** — ~1 790 unit tests across 71 test files (Vitest) + Playwright E2E tests; continuous test coverage for all core modules including GNSS, projections, graph operations, coordinate utilities, coordinate handlers, and the import wizard.
+8. **Production-grade test suite** — ~1 850 unit tests across 75 test files (Vitest) + Playwright E2E tests; continuous test coverage for all core modules including GNSS, projections, graph operations, coordinate utilities, coordinate handlers, and the import wizard.
 
 ### Quick Evaluation Path
 
@@ -35,7 +35,7 @@ npm install
 
 # 2. Run the full unit test suite
 cd frontend && npx vitest run
-# → 1695 tests, ~38s, all green
+# → ~1850 tests, ~50s, all green
 
 # 3. Start the dev server
 npm run dev
@@ -126,6 +126,13 @@ Manholes Mapper is a lightweight yet powerful tool designed for field workers to
 - **Gesture Support**: Touch-optimized gestures for mobile workflows
 - **Territory Management**: Zone-based work assignment tracking
 - **XP & Achievements**: Field work gamification with badges
+
+### ⚡ Field Stepper & Smart Measurement Wizard (July 2026)
+- **Field Stepper**: Full-screen, one-field-per-screen data entry for a node + its edge depths — ~10-12 taps instead of ~24-26 in the legacy drawer; the legacy details drawer still works unchanged
+- **Z-Aware Auto-Connect (Wizard Phase 1)**: Sewage flows downhill — unambiguous terrain creates the edge higher-Z→lower-Z silently (undoable snackbar); flat/missing-Z/far shots ask on a dedicated CONNECT screen; existing uphill edges get a flip offer
+- **Direction Provenance**: Every edge records `direction_source` (chronological / terrain / invert / user) so guessed directions can be re-checked when depth data arrives
+- **Measurement History**: Every TSC3 shot, GNSS capture, and coordinate import appends a full-precision entry to the node's `measurements` history — re-measuring a point never destroys the previous shot, and sync conflict resolution unions histories from both sides
+- **Live Gradient Engine**: Real-time pipe-slope checks (invert or terrain basis) alert the surveyor immediately when a segment runs uphill — while they can still re-shoot
 
 ### 🎯 Survey Mode (TSC3)
 - **TSC3 Integration**: Specialized workflow for TSC3 survey devices
@@ -222,8 +229,9 @@ manholes-mapper/
 │   ├── cockpit/            # Gamification UI (XP, levels, session tracking)
 │   ├── db.js               # IndexedDB database definition
 │   ├── dom/                # DOM manipulation utilities
-│   ├── features/           # Rendering engine and drawing primitives
+│   ├── features/           # Rendering engine, drawing primitives, gradient engine, connection suggest
 │   ├── field-commander/    # Mobile UI shell, gestures, territory, XP/achievements
+│   ├── field-stepper/      # Full-screen one-field-per-screen data entry + CONNECT screen
 │   ├── gnss/               # GNSS/Live Measure module
 │   │   ├── bluetooth-adapter.js   # Bluetooth SPP connection
 │   │   ├── wifi-adapter.js        # WiFi TCP connection
@@ -265,13 +273,14 @@ manholes-mapper/
 │   │   ├── input-flow-engine.js    # Context-aware form rules (hide/disable/reset fields)
 │   │   ├── label-collision.js      # Label overlap detection for canvas rendering
 │   │   ├── legacy-import.js        # Legacy sketch + ITM CSV conversion
+│   │   ├── measurement-history.js  # Append-only per-node field-capture history
 │   │   ├── progressive-renderer.js # Progressive canvas rendering (lazy tiles)
 │   │   ├── render-cache.js         # Canvas render cache for expensive draw calls
 │   │   ├── render-perf.js          # Render performance instrumentation
 │   │   ├── sketch-io.js            # Sketch serialization/deserialization
 │   │   ├── spatial-grid.js         # Spatial lookup grid for fast hit-testing
 │   │   └── toast.js                # Toast notification helper
-│   └── workers/            # Web Workers (GNSS parsing)
+│   └── workers/            # Web Workers (data processing: labels, spatial index)
 ├── api/                    # Vercel serverless API routes
 │   ├── auth/               # Better Auth endpoints
 │   ├── features/           # Feature flags CRUD

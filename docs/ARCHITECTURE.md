@@ -44,6 +44,8 @@ frontend/
 │   │   ├── csrf.js         # CSRF double-submit cookie
 │   │   ├── permissions.js  # RBAC permissions service
 │   │   └── sync-service.js # Background sync after auth
+│   ├── canvas-fab-toolbar.js  # FAB speed dial (canvas navigation shortcuts)
+│   ├── capacitor-api-proxy.js # fetch() proxy for Capacitor native (/api → production)
 │   ├── cockpit/            # Gamification UI (NEW)
 │   │   ├── cockpit.js      # Main cockpit controller
 │   │   ├── action-rail.js  # Bottom action bar
@@ -54,7 +56,9 @@ frontend/
 │   ├── db.js               # IndexedDB database wrapper
 │   ├── dom/                # DOM manipulation utilities
 │   ├── features/           # Canvas rendering engine
+│   │   ├── connection-suggest.js  # Z-aware auto-connect decision engine (wizard Phase 1)
 │   │   ├── drawing-primitives.js  # Base shapes (house, badges)
+│   │   ├── gradient-engine.js     # Live pipe-slope intelligence (invert/terrain gradients)
 │   │   ├── measurement-rail.js    # Inline depth inputs
 │   │   ├── node-icons.js          # Custom node icon system
 │   │   └── rendering.js           # Main render loop
@@ -65,6 +69,8 @@ frontend/
 │   │   ├── fc-xp.js              # XP accumulation
 │   │   ├── fc-achievements.js    # Badge/achievement system
 │   │   └── fc-panels.js          # Panel management
+│   ├── field-stepper/      # Full-screen one-field-per-screen data-entry overlay
+│   │   └── field-stepper.js      # Stepper flow + CONNECT screen (wizard Phase 1)
 │   ├── gnss/               # GNSS/Live Measure module
 │   │   ├── bluetooth-adapter.js          # Bluetooth SPP (Android)
 │   │   ├── wifi-adapter.js               # WiFi TCP (Android)
@@ -79,11 +85,8 @@ frontend/
 │   │   ├── precision-measure-overlay.js  # Overlay UI
 │   │   ├── index.js                      # Public module exports
 │   │   └── connection-manager.js         # Unified connection interface
-│   ├── graph/              # Graph data structures
-│   │   ├── node.js         # Node model
-│   │   ├── edge.js         # Edge model
-│   │   ├── spatial-index.js  # R-tree for fast lookups
-│   │   └── graph.js        # Graph operations
+│   ├── graph/              # Graph ID helpers
+│   │   └── id-utils.js     # Numeric ID detection, home internal ID generation
 │   ├── i18n.js             # Internationalization (Hebrew/English)
 │   ├── legacy/             # Core monolith (being modularized)
 │   │   ├── main.js                 # Main legacy bootstrap
@@ -96,6 +99,11 @@ frontend/
 │   │   ├── coordinate-handlers.js  # ITM coordinate management
 │   │   ├── shared-state.js         # Shared legacy state
 │   │   └── legacy-import-loader.js # Pre-loads import dependencies
+│   ├── layout/             # Responsive layout system
+│   │   ├── layout-manager.js    # Central layout controller
+│   │   ├── unified-sidebar.js   # Collapsible side panel
+│   │   ├── unified-toolbar.js   # Top navigation bar
+│   │   └── micro-status-bar.js  # GPS accuracy HUD badge + offline chip
 │   ├── main-entry.js       # App bootstrap
 │   ├── map/                # Map layer system
 │   │   ├── annotation-layer.js    # Leaflet Geoman draw overlay (zones, polygons)
@@ -154,18 +162,20 @@ frontend/
 │   │   ├── three-d-joystick.js        # Virtual joystick
 │   │   ├── three-d-materials.js      # Materials
 │   │   └── three-d-issues.js          # Issue rendering
-│   ├── types/              # TypeScript types (NEW)
-│   │   ├── index.ts
-│   │   ├── node.ts
-│   │   ├── edge.ts
-│   │   └── project.ts
+│   ├── types/              # TypeScript declarations
+│   │   └── index.d.ts      # Shared ambient type declarations
+│   ├── ui/                 # Small UI primitives
+│   │   └── snackbar.js     # Stacking, actionable snackbar (claims window.showToast)
 │   ├── utils/              # Shared utilities
 │   │   ├── coordinates.js          # ITM/WGS84 transforms, BFS positioning, scale calc
 │   │   ├── csv.js                  # CSV export/import for ArcGIS
+│   │   ├── custom-select.js        # Custom dropdown select component
+│   │   ├── encoding.js             # Text encoding helpers
 │   │   ├── geometry.js             # Geometry helpers
 │   │   ├── input-flow-engine.js    # Context-aware form rules (hide/disable/reset fields)
 │   │   ├── label-collision.js      # Label overlap detection for canvas rendering
 │   │   ├── legacy-import.js        # Legacy sketch + ITM CSV conversion
+│   │   ├── measurement-history.js  # Append-only node.measurements history (unioned on sync conflicts)
 │   │   ├── progressive-renderer.js # Progressive canvas rendering (lazy tiles)
 │   │   ├── render-cache.js         # Canvas render cache for expensive draw calls
 │   │   ├── render-perf.js          # Render performance instrumentation
@@ -177,7 +187,8 @@ frontend/
 │   │   ├── toast.js                # Toast notification helper
 │   │   └── device-perf.js          # Device performance detection
 │   └── workers/            # Web Workers
-│       └── gnss-worker.js  # NMEA parsing in background
+│       ├── data-processor.worker.js  # Heavy data processing off the main thread
+│       └── worker-manager.js         # Worker lifecycle + main-thread fallback
 ├── test-results/           # Playwright test reports
 └── playwright-report/      # Test output
 ```
@@ -186,61 +197,30 @@ frontend/
 
 ## Backend Architecture
 
+Every resource is a **single `index.js` handler** — there are no per-resource `_lib/` folders and no dynamic `[id].js` files. `vercel.json` rewrites path params to query params (e.g. `/api/sketches/:id` → `/api/sketches?id=:id`), so handlers branch on `req.query.id` / method / `action`.
+
 ```
 api/
-├── auth/                   # Better Auth endpoints
-│   ├── sign-in.js
-│   ├── sign-up.js
-│   ├── sign-out.js
-│   ├── callback.js
-│   └── _lib/
-│       └── auth-utils.js   # Better Auth setup
-├── features/               # Feature flags CRUD
-│   ├── index.js
-│   └── _lib/
-│       └── feature-validator.js
-├── layers/                 # GIS reference layer data
-│   ├── index.js
-│   └── _lib/
-│       └── layer-manager.js
-├── organizations/          # Organization management
-│   ├── index.js
-│   └── _lib/
-│       └── org-validator.js
-├── projects/               # Project CRUD
-│   ├── index.js
-│   └── _lib/
-│       ├── project-validator.js
-│       └── project-permissions.js
-├── sketches/               # Sketch CRUD and locking
-│   ├── index.js
-│   ├── lock.js
-│   ├── unlock.js
-│   └── _lib/
-│       ├── sketch-validator.js
-│       └── sketch-permissions.js
-├── users/                  # User management
-│   ├── index.js
-│   └── _lib/
-│       └── user-validator.js
-├── user-role/              # Role and permissions
-│   ├── index.js
-│   └── _lib/
-│       └── role-permissions.js
-├── issue-comments/         # Issue comment system
-│   ├── index.js
-│   └── _lib/
-│       └── comment-validator.js
-├── stats/                  # Statistics and analytics
-│   ├── index.js
-│   └── _lib/
-│       └── stats-calculator.js
-├── health.js               # Health check endpoint
-└── _lib/
-    ├── db.js               # Neon Postgres client
-    ├── auth.js             # Better Auth configuration
-    ├── validators.js       # Common validators
-    └── rate-limit.js       # Rate limiting middleware
+├── auth/index.js           # Better Auth handler (sign-in/up/out, session)
+├── features/index.js       # Feature flags per user/org
+├── issue-comments/index.js # Issue comments, close/reopen, notifications
+├── layers/index.js         # Project GeoJSON reference layers
+├── organizations/index.js  # Organization CRUD
+├── projects/index.js       # Project CRUD + duplicate
+├── sketches/index.js       # Sketch CRUD + lock/unlock/refresh (30-min expiry)
+├── stats/index.js          # Statistics (leaderboard, workload, metadata)
+├── user-role/index.js      # Current user's role, permissions, features
+├── users/index.js          # User management (role/org assignment)
+├── health.js               # Health check (public, Edge runtime)
+└── _lib/                   # Shared API library (flat)
+    ├── auth.js             # verifyAuth(), parseBody(), header/cookie helpers
+    ├── cors.js             # Origin resolution (Capacitor https://localhost allowed)
+    ├── csrf.js             # CSRF double-submit protection helpers
+    ├── db.js               # Neon Postgres client + all DB operations
+    ├── error-handler.js    # Shared error responses
+    ├── rate-limit.js       # Sliding-window per-IP rate limiting
+    ├── schema.sql          # STALE reference schema (db.js initializeDatabase() is authoritative)
+    └── validators.js       # Common validators (MAX_NODES, MAX_EDGES, UUIDs)
 ```
 
 ---
@@ -419,7 +399,7 @@ api/
 
 **Components:**
 - **Rendering Engine:** HTML5 Canvas API with progressive rendering
-- **Spatial Index:** R-tree for fast node/edge lookups (quadtree optimized)
+- **Spatial Index:** Uniform lookup grid (`utils/spatial-grid.js`) for fast node/edge hit-testing
 - **View Transform:** Custom pan/zoom with view stretch support
 - **LOD (Level of Detail):** Simplified rendering at extreme zoom levels
 
@@ -493,9 +473,10 @@ destroyAnnotationLayer(); // cleanup on unmount
 - **Service Worker:** Asset caching, offline fallback, background sync
 
 **Sync Mechanism:**
-- Auto-save on canvas change
-- Background sync when network reconnected
-- Conflict resolution (last write wins)
+- Auto-save on canvas change (debounced PUT via `auth/sync-service.js`)
+- Background sync when network reconnected (IndexedDB `syncQueue` drained)
+- Optimistic locking: each sketch carries an integer `version` counter; a stale PUT returns 409
+- Conflict resolution: nodes/edges unioned by id (server preferred on same-id clashes), and per-node append-only measurement histories unioned — field shots are never dropped
 
 ### 6. Issue System
 
@@ -575,13 +556,13 @@ destroyAnnotationLayer(); // cleanup on unmount
 
 ### Unit Tests (Vitest)
 - **Location:** `frontend/tests/**/*.test.ts` (unit tests in `tests/unit/`, integration in `tests/`)
-- **Coverage:** 1,695 tests (66 test files)
+- **Coverage:** 1,853 tests (75 test files, vitest run 2026-07-20)
 - **Command:** `npm run test:run`
 - **Framework:** Vitest with jsdom
 
 ### E2E Tests (Playwright)
-- **Location:** `frontend/tests/**/spec.js`
-- **Coverage:** Browser-based UI tests
+- **Location:** `frontend/tests/e2e/*.spec.ts`
+- **Coverage:** 18 spec files (auth, canvas drawing, cockpit, full-network audit, project canvas, RTL layout, TSC5 field workflows, …)
 - **Command:** `npm run test:e2e` (or `playwright test`)
 - **Platforms:** Chromium, Firefox, WebKit, mobile
 
@@ -611,11 +592,11 @@ destroyAnnotationLayer(); // cleanup on unmount
   - `BETTER_AUTH_URL`: Auth base URL
 
 ### Auto-Deployments
-- `master` branch → Production (`vercel.app`)
-- `dev` branch → Preview (`git-dev.vercel.app`)
+- `dev` branch → **Production** (`https://manholes-mapper-three.vercel.app`) — since 2026-07-15, `dev` IS the Vercel production branch (team `gis-6579s-projects`)
+- `master` branch → mirrors `dev`; builds Preview deployments only
 
-### Alternative Deployment
-Build `dist/` and deploy to any static host (Netlify, GitHub Pages). HTTPS required for Service Worker.
+### GitHub Pages (Field Deployment)
+`.github/workflows/deploy.yml` publishes `master` to GitHub Pages: `hussam0is.github.io/manholes-mapper` — the live field deployment, still serving the old offline build. HTTPS (required for the Service Worker) is provided by both hosts.
 
 ---
 
@@ -658,11 +639,11 @@ Build `dist/` and deploy to any static host (Netlify, GitHub Pages). HTTPS requi
 
 3. **GNSS:**
    - Position staleness check (3s threshold)
-   - NMEA parsing in worker
+   - Lightweight synchronous NMEA parsing (`gnss/nmea-parser.js`)
    - Connection state caching
 
 4. **Testing:**
-   - 1,695 unit tests (all passing)
+   - 1,853 unit tests (all passing)
    - E2E tests with Playwright
    - Test coverage reports
 
@@ -690,4 +671,4 @@ Build `dist/` and deploy to any static host (Netlify, GitHub Pages). HTTPS requi
 
 ---
 
-*Last updated: 2026-04-04 (test counts corrected to 1,695 / 66 files; project/ module list completed)*
+*Last updated: 2026-07-20 (frontend/api trees, spatial index, sync conflict resolution, deployment, and test counts synced with the codebase)*

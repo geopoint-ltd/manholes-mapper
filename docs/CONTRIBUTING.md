@@ -63,13 +63,10 @@ cd frontend && npx vitest tests/unit/nmea-parser.test.ts
 cd frontend && npx playwright test
 
 # Run tests in specific file
-cd frontend && npx playwright test tests/issue-nav.spec.js
+cd frontend && npx playwright test tests/e2e/cockpit.spec.ts
 
 # Run with UI mode
 cd frontend && npx playwright test --ui
-
-# Generate coverage report
-cd frontend && npx playwright test --coverage
 ```
 
 ### Test Results
@@ -191,8 +188,8 @@ manholes-mapper/
 
 1. Build the application: `npm run build`
 2. Test the production build locally: `npm run preview`
-3. Deploy to Vercel: Push to `master` branch
-4. Deploy to preview: Push to `dev` branch
+3. Deploy to production: Push to `dev` — since 2026-07-15, `dev` **is** the Vercel production branch (team `gis-6579s-projects`, https://manholes-mapper-three.vercel.app). After pushing, verify the deploy per the `vercel-promote` skill.
+4. Other branches (including `master`, which mirrors `dev`) only build previews.
 
 ## API Development
 

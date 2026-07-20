@@ -36,7 +36,7 @@ npm run db:migrate      # Migrate Better Auth tables (needs POSTGRES_URL)
 ## Testing
 
 ```bash
-npm run test:run                                   # Run all unit tests (Vitest, ~1790 tests)
+npm run test:run                                   # Run all unit tests (Vitest, ~1850 tests)
 npm run test:run -- tests/unit/gnss-state.test.ts  # Single test file (paths relative to frontend/, the vitest root)
 npm test                                           # Watch mode
 ```
@@ -45,7 +45,7 @@ Config in `frontend/vitest.config.ts`: jsdom environment, setup in `frontend/tes
 
 **The default run excludes `tests/e2e/**` (Playwright) and `tests/api/**` (integration tests that hit real Neon Postgres and need `POSTGRES_URL` in `.env.local`).**
 
-**Test layout (~70 files):**
+**Test layout (~75 files):**
 - `frontend/tests/unit/` — the bulk of tests: auth, GNSS, i18n, canvas rendering, cockpit, field-commander, three-d, project canvas, admin panels, validators, etc.
 - `frontend/tests/api/` — contracts, sketches, system, validators (real DB, excluded by default)
 - `frontend/tests/` (root) — coordinates, edge-cases, map-coordinates, map-layer-integration, map-tile-visibility, security, sync-service
@@ -60,7 +60,7 @@ npx playwright test --project=chromium # Desktop only
 BASE_URL=http://localhost:5173 npx playwright test  # Custom base URL
 ```
 
-E2E config in `frontend/playwright.config.ts`. ~17 specs in `frontend/tests/e2e/` (auth, canvas-drawing, cockpit, project-canvas, rtl-layout, tsc5-field-workflows, …). Runs `npm run dev` automatically via `webServer`. Projects: Desktop Chrome (Chromium) + Mobile Chrome (Pixel 5). Retries: 2 on CI, 0 locally. Screenshots/video on failure.
+E2E config in `frontend/playwright.config.ts`. ~18 specs in `frontend/tests/e2e/` (auth, canvas-drawing, cockpit, full-network-audit, project-canvas, rtl-layout, tsc5-field-workflows, …). Runs `npm run dev` automatically via `webServer`. Projects: Desktop Chrome (Chromium) + Mobile Chrome (Pixel 5). Retries: 2 on CI, 0 locally. Screenshots/video on failure.
 
 ### QA Expert Workflow (`qa-skill/`)
 
@@ -151,7 +151,8 @@ CSS is imported via JS (`import '../styles.css'`) for Vite dev/build compatibili
 - **`gnss/`** — Live Measure: GNSS state machine (`gnss-state.js` singleton), NMEA parsing (`nmea-parser.js` — GGA/RMC), browser-location-adapter (bridges `navigator.geolocation` → `gnssState`, infers fix quality from accuracy), Bluetooth/WiFi/TMM/mock adapters, connection manager, canvas marker rendering (`gnss-marker.js`), point capture dialog, precision-gated measurement (`precision-measure.js`)
 - **`survey/`** — TSC3 survey controller integration: device picker dialog, TSC3 Bluetooth/WebSocket adapters (Trimble TSC3 receivers), TSC3 NMEA parser, survey node-type dialog, connection manager
 - **`admin/`** — Admin tab modules lazy-imported by the hub `legacy/admin-handlers.js`: `admin-users.js`, `admin-organizations.js`, `admin-features.js`, `admin-fixes.js` (cross-sketch issues & fix suggestions), `admin-statistics.js` (KPI dashboard), `admin-settings.js`, `input-flow-settings.js` (conditional field logic), `projects-settings.js`
-- **`features/`** — Canvas drawing primitives (`drawing-primitives.js`), graph rendering engine (`rendering.js`), node icons (`node-icons.js`: manhole, drainage, house connection icons), measurement rail (`measurement-rail.js`)
+- **`features/`** — Canvas drawing primitives (`drawing-primitives.js`), graph rendering engine (`rendering.js`), node icons (`node-icons.js`: manhole, drainage, house connection icons), measurement rail (`measurement-rail.js`), live pipe-slope intelligence (`gradient-engine.js`: invert/terrain gradient per edge, uphill alerts on status transitions, exempt types Home/ForLater/Issue), Z-aware auto-connect decision engine (`connection-suggest.js`: pure logic, tiers auto/auto-home/flip-offer/ask/exists per docs/SMART_MEASUREMENT_WIZARD.md §B)
+- **`field-stepper/`** — Full-screen one-field-per-screen data entry overlay for a node + its edge depths (~10-12 taps vs ~24-26 in the legacy drawer). Additive: legacy details drawer untouched. Includes the CONNECT screen (wizard Phase 1) for ambiguous connection decisions. TSC3 arrivals refresh non-hijackingly via `notifyStepperOfExternalNodeUpdate()`; exposes `window.__openFieldStepper`
 - **`project/`** — Project canvas mode: `project-canvas-state.js` (multi-sketch Map, active/visibility tracking, sketch switching), `sketch-side-panel.js` (collapsible list UI with per-sketch stats, issues sub-panel, issue navigation via `window.__setViewState` + `startIssueHighlight`), `sketch-issues.js` (issue detection: missing coords, missing measurements, total km computation), `issue-highlight.js` (pulsing red ring animation), `issue-nav-state.js`, `fix-suggestions.js`, `merge-mode.js` (duplicate node merging), `last-edit-tracker.js`, `project-canvas-renderer.js` (background sketch rendering), `project-loading-overlay.js`
 - **`menu/`** — Responsive menu system: `menu-events.js` (EventEmitter singleton with delegation), `menu-config.js`, `command-menu.js` (command palette), `action-bar.js`, `header.js`
 - **`map/`** — `projections.js` (ITM/WGS84 via proj4, EPSG:2039), `govmap-layer.js` (Israeli map tiles), `tile-manager.js` (LRU cache), `reference-layers.js`, `annotation-layer.js` (Leaflet Geoman zones/polygons, autosaved to IndexedDB), `layers-config.js`, `street-view.js`, `user-location.js` (geolocation permissions)
@@ -160,7 +161,7 @@ CSS is imported via JS (`import '../styles.css'`) for Vite dev/build compatibili
 - **`layout/`** — `layout-manager.js`, `unified-sidebar.js`, `unified-toolbar.js`, `micro-status-bar.js` (GPS accuracy HUD badge, offline chip)
 - **`three-d/`** — 3D sketch visualization (Three.js, dynamically imported): `three-d-view.js` (main overlay with OrbitControls, CSS2D labels), `three-d-scene.js` (nodes as spheres, edges as tubes), materials, camera framing, FPS controls (WASD + mouse), virtual joystick (mobile), miniature/diorama mode, 3D issue highlighting
 - **`pages/`** — Hash-routed full-page views: `profile-page.js`, `leaderboard-page.js`, `project-stats-page.js`, `metadata-dashboard.js`
-- **`utils/`** — `coordinates.js` (CSV parsing/import, BFS coordinate propagation), `csv.js` (export with formula injection prevention), `sketch-io.js` (JSON import/export, schema v1.1), `legacy-import.js` (legacy sketch + ITM CSV conversion), `floating-keyboard.js` (draggable numeric keyboard), `input-flow-engine.js` (conditional field evaluation), `spatial-grid.js` (fast hit-testing), `progressive-renderer.js`, `render-cache.js`, `render-perf.js`, `resizable-drawer.js`, `backup-manager.js` (hourly/daily), `label-collision.js`, `geometry.js`, `toast.js`, `encoding.js`, `custom-select.js`, `device-perf.js`
+- **`utils/`** — `coordinates.js` (CSV parsing/import, BFS coordinate propagation), `csv.js` (export with formula injection prevention), `sketch-io.js` (JSON import/export, schema v1.1), `legacy-import.js` (legacy sketch + ITM CSV conversion), `measurement-history.js` (append-only `node.measurements` history for every TSC3/GNSS/import capture — full precision, capped at 20 keeping original + recent, elevation `null` when unmeasured; union-merged on sync conflicts), `floating-keyboard.js` (draggable numeric keyboard), `input-flow-engine.js` (conditional field evaluation), `spatial-grid.js` (fast hit-testing), `progressive-renderer.js`, `render-cache.js`, `render-perf.js`, `resizable-drawer.js`, `backup-manager.js` (hourly/daily), `label-collision.js`, `geometry.js`, `toast.js`, `encoding.js`, `custom-select.js`, `device-perf.js`
 - **`state/`** — `constants.js` (NODE_RADIUS=20, COLORS_LIGHT/DARK palettes, node/edge material/type/diameter catalogs, `isDarkMode()`), `persistence.js` (IndexedDB ↔ localStorage bridging, STORAGE_KEYS), `app-state.js`, `app-store.js`, `event-bus.js`, `skill-level.js`
 - **`notifications/`** — `notification-bell.js` (notification center UI)
 - **`workers/`** — `data-processor.worker.js` + `worker-manager.js` (Web Worker offloading)
@@ -214,6 +215,8 @@ Route behaviors worth knowing: `GET /api/sketches` returns metadata-only rows (n
 
 **Better Auth tables:** `user`, `session`, `account`, `verification`
 
+**Inside the JSONB blobs** (no schema change, serialized verbatim): nodes carry `measurements[]` (append-only field-capture history, see `utils/measurement-history.js`) and `measure_source` ('tsc3' | 'gnss' | 'import'); edges carry `direction_source` provenance ('chronological' | 'terrain' | 'invert' | 'user') stamped by every edge-creation path (GNSS chains stamp 'chronological').
+
 **Roles:** `user` (own sketches), `admin` (org resources), `super_admin` (everything)
 
 **Feature flags:** `export_csv`, `export_sketch`, `admin_settings`, `finish_workday`, `node_types`, `edge_types`
@@ -230,7 +233,7 @@ Toggle via `body.classList.toggle('heatmap-active')`. When active, nodes are col
 
 1. **Canvas** — Users draw nodes/edges on HTML5 Canvas. Coordinates go through: WGS84 → ITM (proj4) → Canvas World → Screen pixels (via `viewScale`, `stretchX/Y`, `viewTranslate`)
 2. **Persistence** — localStorage (primary, synchronous) + IndexedDB (backup, async) + cloud Postgres (source of truth via sync-service)
-3. **Sync** — Online: debounced (2s) PUT to `/api/sketches/:id` (POST to `/api/sketches` only on create; PUT returns 409 with `{_conflict: true, currentSketch}` on version conflict). Offline: queued in IndexedDB `syncQueue`, drained on reconnect. `syncService.onSyncStateChange` notifies UI.
+3. **Sync** — Online: debounced (2s) PUT to `/api/sketches/:id` (POST to `/api/sketches` only on create). PUT returns 409 with `{error, currentSketch}` on version conflict or `{error, lock}` on lock conflict; sync-service surfaces the version case as `{_conflict: true, currentSketch}`. All four 409-conflict resolution branches (direct + queued, metadata + structural) union per-node measurement histories so conflict resolution never drops field shots. Offline: queued in IndexedDB `syncQueue`, drained on reconnect. `syncService.onSyncStateChange` notifies UI.
 4. **Auth** — Better Auth with Neon Postgres. Session cookies (7-day expiry). `auth-guard.js` redirects unauthenticated users to login panel. 15-min session polling (the 5-min figure is the separate Better Auth cookie-cache maxAge).
 
 ### Internationalization
@@ -253,9 +256,9 @@ Toggle via `body.classList.toggle('heatmap-active')`. When active, nodes are col
 
 ### Vite Build
 
-Stable output filename: `main.js` (dist root, referenced by index.html); CSS is fingerprinted into `assets/[name]-[hash:8].css`. Target es2022, modulePreload polyfill disabled. Chunk size warning: 1000KB. Code splitting:
-- `better-auth` → `auth`; `react`/`scheduler` → `react-vendor`; `three` → `three-vendor`; `proj4`/`mgrs`/`wkt-parser` → `proj4-vendor`; other `node_modules` → `vendor`
-- Lazy app chunks: `admin` (admin/ settings modules), `cockpit`, `field-commander`, `survey` (survey/ + tsc3-handlers)
+Stable output filename: `main.js` (dist root, referenced by index.html); CSS is fingerprinted into `assets/[name]-[hash:8].css`. Target es2022, modulePreload polyfill disabled. Chunk size warning: 1000KB. Code splitting (vendor-only since the 2026-07-19 perf pass):
+- `better-auth` → `auth`; `react`/`scheduler` → `react-vendor`; `three` → `three-vendor`; `proj4`/`mgrs`/`wkt-parser` → `proj4-vendor`; `leaflet`/`geoman` → `leaflet-vendor`; other `node_modules` → `vendor`
+- App code is deliberately NOT manually chunked — Rollup auto-splits dynamic imports. **Never re-add app modules to manualChunks**: named app chunks dragged shared deps (i18n, db, auth, gnss, map) in as static entry deps, executing ~1.5MB of "lazy" JS on every startup.
 
 HTTPS dev via mkcert cert files (`manholes-mapper.local+5.pem` / `-key.pem`) auto-detected in `frontend/`; `@vitejs/plugin-basic-ssl` is installed but unused. HMR disabled under `vercel dev` (manual refresh required). Port from `PORT` env var or 5173.
 
@@ -337,12 +340,12 @@ Also read by the API: `INITIAL_SUPER_ADMIN_EMAIL` (`api/_lib/db.js` — a newly 
 
 **Testing:** Vitest 4.x (unit, ~1790 tests), Playwright 1.5x (E2E), jsdom
 
-**Tooling:** ESLint 9.x (flat config), Prettier 3.x, TypeScript 5.9.x (`strict: false`)
+**Tooling:** ESLint 9.x (flat config), Prettier 3.x, TypeScript 5.9.x (`strict: true`, `strictPropertyInitialization: false`)
 
 ## Conventions
 
 - **ES Modules** throughout (`"type": "module"` in package.json)
-- TypeScript config with `"strict": false` (gradual migration). Path alias: `@/*` → `frontend/src/*`.
+- TypeScript config with `"strict": true` (`strictPropertyInitialization` off). Path alias: `@/*` → `frontend/src/*`.
 - Mobile-first: test all UI changes at 360px width **and at 640×360 landscape (Trimble TSC5, the primary field device)**. Canvas toolbar and panels must work on touch devices.
 - RTL: all panels must work correctly in Hebrew (RTL). Use `margin-inline-*` / `padding-inline-*` over `margin-left`/`margin-right`.
 - Material Icons self-hosted at `frontend/public/fonts/material-icons.woff2` (CSP blocks CDN loading).

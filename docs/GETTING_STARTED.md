@@ -32,6 +32,8 @@ npm run dev
 
 Open **http://localhost:5173** in your browser to test the app.
 
+> ⚠️ **`npm run dev` proxies `/api/*` to production** (`manholes-mapper-three.vercel.app`) — you are signed in against the real backend and **writes hit the production database**. Use `npm run start` (vercel dev) with your own `.env.local` `POSTGRES_URL` if you need an isolated backend.
+
 ---
 
 ## Environment Variables
@@ -209,8 +211,9 @@ manholes-mapper/
 │   │   ├── cockpit/            # Gamification (XP, skill levels, session tracker)
 │   │   ├── db.js               # IndexedDB wrapper
 │   │   ├── dom/                # DOM manipulation utilities
-│   │   ├── features/           # Canvas rendering and drawing primitives
+│   │   ├── features/           # Canvas rendering, drawing primitives, gradient engine, connection suggest
 │   │   ├── field-commander/    # Mobile UI shell, gestures, territory, XP/achievements
+│   │   ├── field-stepper/      # Full-screen one-field-per-screen data entry + CONNECT screen
 │   │   ├── gnss/               # GNSS/GPS live measure module
 │   │   ├── graph/              # Graph data structures and ID utilities
 │   │   ├── layout/             # Layout manager, sidebar, toolbar
@@ -226,14 +229,14 @@ manholes-mapper/
 │   │   ├── three-d/            # 3D underground visualization
 │   │   ├── types/              # TypeScript type definitions
 │   │   ├── utils/              # Utility functions (CSV, coordinates, geometry, UI)
-│   │   ├── workers/            # Web Workers (GNSS parsing)
+│   │   ├── workers/            # Web Workers (data processing: labels, spatial index)
 │   │   ├── i18n.js             # Hebrew/English translations
 │   │   └── main-entry.js       # Entry point
 │   ├── tests/                  # Vitest unit tests + Playwright E2E tests
 │   │   ├── unit/               # Unit test files (.test.ts)
 │   │   └── e2e/                # E2E Playwright specs
 │   ├── index.html              # Main HTML
-│   └── styles.css              # Global styles + Tailwind directives
+│   └── styles.css              # Global styles (design tokens; Tailwind is NOT wired up)
 ├── api/                    # Vercel serverless API routes
 │   ├── auth/               # Better Auth endpoints
 │   ├── sketches/           # Sketch CRUD and locking

@@ -6,12 +6,13 @@
 index.html
  └─ <script type="module"> src/main-entry.js
      ├─ src/capacitor-api-proxy.js    (fetch interceptor, must load first)
-     ├─ styles.css + menu.css         (JS imports for Vite)
+     ├─ src/auth/csrf.js              (fetch wrapper — x-csrf-token double-submit header)
+     ├─ styles.css + design-system-v2.css + menu.css  (JS imports for Vite)
      ├─ Auth init (auth-guard, auth-client, permissions, sync-service)
      ├─ i18n init
      ├─ GNSS init
      ├─ Exposes window globals (t, isRTL, authGuard, menuEvents, CONSTS…)
-     ├─ src/legacy/main.js            (side-effect import — monolith ~11,300 lines)
+     ├─ src/legacy/main.js            (side-effect import — 2,133 lines; monolith modularized into ~24 sibling modules in src/legacy/)
      └─ DOMContentLoaded →
          ├─ initMenuSystem()
          ├─ initCanvasFabToolbar()
@@ -34,7 +35,7 @@ index.html
 | `#/projects` | Projects Screen | Yes (admin+) | Header button / mobile menu |
 | `#/project/:id` | Project Canvas Mode | Yes | "Open Project" card on home |
 
-Route handler: `handleRoute()` in `src/legacy/main.js:1113` via `hashchange` event.
+Route handler: `handleRoute()` defined in `src/legacy/auth-ui.js` (re-exported as `F.handleRoute`) via `hashchange` event.
 
 ---
 
@@ -501,7 +502,7 @@ Focus: (1) React mount/unmount into `#authContainer` via `mountAuthSignIn()`/`mo
 
 **SignInForm / SignUpForm** (`src/auth/auth-provider.jsx`)
 React components rendering email/password forms with validation and error display.
-Focus: (1) static import (not dynamic) so forms work offline, (2) form links use hash navigation to switch between `#/login` ↔ `#/signup`, (3) calls Better Auth client `signIn.email()` / `signUp.email()`.
+Focus: (1) lazily mounted via dynamic `import('../auth/auth-provider.jsx')` in `legacy/auth-ui.js` — keeps React out of the eager bundle (2026-07-19 perf pass), (2) form links use hash navigation to switch between `#/login` ↔ `#/signup`, (3) calls Better Auth client `signIn.email()` / `signUp.email()`.
 
 **Admin Screen** (`#adminScreen`)
 Full-screen tabbed hub for system administration — settings, projects, users, orgs, features, and data fixes.
@@ -878,9 +879,9 @@ Focus: (1) `window.addEventListener('online')` → "Connection restored" toast, 
 
 | File | Role |
 |------|------|
-| `index.html` | All static DOM elements (949 lines) |
-| `src/main-entry.js` | ES module entry, auth/i18n/GNSS/menu init (972 lines) |
-| `src/legacy/main.js` | Monolith: canvas, routing, panels, sidebar, CRUD (~11,300 lines) |
+| `index.html` | All static DOM elements (1,037 lines) |
+| `src/main-entry.js` | ES module entry, auth/i18n/GNSS/menu init (1,262 lines) |
+| `src/legacy/main.js` | Legacy core: canvas render loop + top-level wiring (2,133 lines; monolith modularized into ~24 sibling modules in `src/legacy/`) |
 | `src/legacy/shared-state.js` | Extracted shared state exports (legacy ↔ ES module bridge) |
 | `src/legacy/gnss-handlers.js` | Extracted GNSS event handlers (~490 lines) |
 | `src/legacy/tsc3-handlers.js` | Extracted TSC3 survey controller handlers (~170 lines) |
