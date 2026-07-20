@@ -95,3 +95,12 @@ scripts/session-watchdog.sh
 .claude/settings.local.json
 
 frontend/audit-results/
+
+# Local artifacts (untracked 2026-07-20 cleanup)
+test-artifacts/
+.playwright-mcp/
+scripts/geojson_output/
+qa/videos/
+data/screenshot-*.png
+frontend/test-output.txt
+frontend/dev-output.txt
