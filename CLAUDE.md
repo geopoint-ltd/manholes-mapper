@@ -64,6 +64,21 @@ E2E config in `frontend/playwright.config.ts`. ~18 specs in `frontend/tests/e2e/
 
 **Projects:** Desktop Chrome (Chromium), Mobile Chrome (Pixel 5), and **TSC5** — the Trimble field device: 640×360 CSS landscape at DPR 2, `isMobile` + `hasTouch`. `tsc5-field-workflows.spec.ts` runs only under the TSC5 project (`npx playwright test --project=TSC5`); any spec can be run under it to check a change at real field geometry.
 
+### Performance regression gate (latency)
+
+A two-layer latency gate guards against the large-network (10k-node) slowdowns fixed in the 2026-07-20 perf pass. **Both layers run automatically in the existing `qa.yml` CI on every push to `dev`** — no separate wiring.
+
+```bash
+npm run test:perf        # Vitest hot-path budgets (also part of npm run test:run → CI unit job)
+npm run test:perf:e2e    # Playwright browser latency spec, TSC5 geometry (part of CI e2e job)
+npm run perf:report      # scripts/perf-10k-bench.mjs — human-readable numbers, no assertions (needs a dev server)
+```
+
+- **Layer 1 — `frontend/tests/perf/hot-paths.perf.test.ts`** (Vitest, runs in the default suite): budgets for the interaction hot paths that scale with node count — `findEdgeAt`, `findNodeAt`, `computeSketchIssues`. Guards the O(E·N) hit-test and O(N²) merge scan.
+- **Layer 2 — `frontend/tests/e2e/perf-latency.spec.ts`** (Playwright, TSC5 only): loads 10k nodes into the real app and measures `draw()`.
+- Both share the deterministic fixture `frontend/tests/fixtures/perf-network.ts` (`buildPerfNetwork` / `buildPerfSketch`).
+- **Anti-flake design:** the load-bearing assertions are machine-independent — all-nodes-drawn (not a truncated slice), idle-rAF-count ≤ 3 (no runaway redraw loop), and small-vs-large **scaling ratios** (linear ≈4× vs quadratic ≈16× for a 4× graph). Absolute-ms budgets carry large headroom (tens of × over current cost) so a slow CI runner can't cause a false failure. Keep it that way: never tighten a ms budget to near the measured value, and never assert on a signal that varies with CPU. Use `perf:report` to see current numbers before adjusting any budget.
+
 ### QA Expert Workflow (`qa-skill/`)
 
 Repo-root `qa-skill/` holds cross-platform QA runners: `./qa-skill/run_qa.ps1` (Windows) / `./qa-skill/run_qa.sh`, with results in `qa-skill/reporting/`. The QA-expert workflow (from `.cursor/rules/qa-expert.mdc`, scoped to tests/**, src/**, api/**): (1) discover stack/test tooling, (2) draft a plan across Unit/Integration/API/E2E/Security/Performance suites, (3) implement prioritizing auth + sketch/node/edge CRUD critical paths, data mutations, and security boundaries, (4) execute via the run_qa runner and summarize from qa-skill/reporting/. Standards: Vitest unit tests with mocked externals, Playwright E2E on critical journeys, API schema+auth validation, `npm audit` + exposed-secret checks.
