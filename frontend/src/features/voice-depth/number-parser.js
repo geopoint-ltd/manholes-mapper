@@ -16,7 +16,15 @@
  *     unit:       'm' | 'cm' | null
  *     raw:        string          // the transcript as received
  *     ambiguous:  boolean         // true when >1 plausible candidate — caller must force a tap
+ *     leadingPoint: boolean       // parse began at the decimal marker with NO integer part —
+ *                                 // the signature of a clipped first word («נקודה שלושים וארבע»
+ *                                 // for a spoken 1.34, field bug 2026-07-23 #2). Caller should
+ *                                 // prefer an alternative without this flag and hint "say again".
  *   }
+ *
+ *   pickBestParse(transcripts, lang) — rank a recognizer's alternative list and
+ *   return the best parse with candidates merged across ALL alternatives. Use
+ *   this instead of taking the first alternative that parses.
  *
  * Design notes:
  *  - Recognizers may return DIGITS ("1.5"), WORDS ("one point five"), or any mix
@@ -306,7 +314,7 @@ export function parseSpokenDepth(transcript, lang) {
   const raw = String(transcript == null ? '' : transcript);
   const fam = langFamily(lang);
   const lex = WORDS[fam];
-  const empty = { value: null, candidates: [], unit: null, raw, ambiguous: false };
+  const empty = { value: null, candidates: [], unit: null, raw, ambiguous: false, leadingPoint: false };
 
   let norm = normalize(raw);
   if (fam === 'ar') norm = normalizeArabic(norm);
@@ -451,7 +459,48 @@ export function parseSpokenDepth(transcript, lang) {
     candSet.push({ v: baseInt + fracAdd, dec: fracAdd !== 0 });
   }
 
-  return finalizeMany(expandCm(candSet, unit, hadExplicitPoint, fracAdd), unit, raw);
+  const result = finalizeMany(expandCm(candSet, unit, hadExplicitPoint, fracAdd), unit, raw);
+  // The parse started at the decimal marker with no integer part — the signature
+  // of the recognizer clipping a short first word («אחד» spoken too soon after
+  // the mic tap). We never invent the missing integer; we flag it so the caller
+  // can prefer a fuller alternative and hint "say again".
+  result.leadingPoint = hadExplicitPoint && intVal === null && !metreImpliesOne;
+  return result;
+}
+
+/**
+ * Rank a recognizer's alternative transcripts and return the best parse.
+ * The first alternative is NOT always the right one: a clipped first word can
+ * make alternative[0] parse cleanly to the wrong value («נקודה שלושים וארבע» →
+ * 0.34) while alternative[2] kept the integer («אחד נקודה שלושים וארבע» → 1.34).
+ * Preference order: a parse with a value → without the clipped-start flag →
+ * in the plausible depth range → heard more words → recognizer order.
+ * Candidates are merged across ALL parsing alternatives so the runner-up chip
+ * can come from a different alternative than the winner.
+ */
+export function pickBestParse(transcripts, lang) {
+  const list = Array.isArray(transcripts) ? transcripts : [transcripts];
+  const parses = list.map((t) => parseSpokenDepth(t, lang));
+  const withValue = parses.filter((r) => r.value !== null);
+  if (withValue.length === 0) return parses[0] || parseSpokenDepth('', lang);
+
+  const inRange = (r) => {
+    const n = parseFloat(r.value);
+    return n >= DEPTH_MIN_M && n <= DEPTH_MAX_M;
+  };
+  const score = (r) =>
+    (r.leadingPoint ? 0 : 4) +
+    (inRange(r) ? 2 : 0) +
+    Math.min(1, String(r.raw).trim().split(/\s+/).length / 8);
+
+  let best = withValue[0];
+  for (const p of withValue.slice(1)) if (score(p) > score(best)) best = p;
+
+  const merged = [...best.candidates];
+  for (const p of withValue) {
+    for (const c of p.candidates) if (!merged.includes(c)) merged.push(c);
+  }
+  return { ...best, candidates: merged, ambiguous: merged.length > 1 };
 }
 
 /**
@@ -498,6 +547,7 @@ function finalizeMany(cands, unit, raw) {
     unit,
     raw,
     ambiguous: candidates.length > 1,
+    leadingPoint: false,
   };
 }
 

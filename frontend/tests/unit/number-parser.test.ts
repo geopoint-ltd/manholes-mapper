@@ -14,6 +14,7 @@ import attackCasesJson from '../fixtures/voice-depth-attack-cases.json';
 // @ts-expect-error — plain JS module, no type declarations
 import {
   parseSpokenDepth,
+  pickBestParse,
   sanitizeDepth,
   langFamily,
   VOICE_LANGS,
@@ -234,6 +235,52 @@ describe('junk & edge input', () => {
     expect(r.raw).toBe('');
   });
   it('whitespace only → null', () => expect(val('   ', 'he-IL')).toBeNull());
+});
+
+describe('field bug 2026-07-23 #2 — clipped first word (spoken 1.34 became 0.34)', () => {
+  it('every complete form of 1.34 parses to 1.34', () => {
+    for (const t of ['אחד נקודה שלושים וארבע', 'אחת נקודה שלושים וארבע', 'מטר שלושים וארבע', 'אחד. שלושים וארבע', '1.34']) {
+      expect(parseSpokenDepth(t, 'he-IL').value).toBe('1.34');
+    }
+  });
+  it('a clipped transcript is flagged with leadingPoint', () => {
+    const r = parseSpokenDepth('נקודה שלושים וארבע', 'he-IL');
+    expect(r.value).toBe('0.34'); // never invents the missing integer
+    expect(r.leadingPoint).toBe(true);
+    expect(parseSpokenDepth('.34', 'he-IL').leadingPoint).toBe(true);
+  });
+  it('complete transcripts are NOT flagged', () => {
+    expect(parseSpokenDepth('אחד נקודה שלושים וארבע', 'he-IL').leadingPoint).toBe(false);
+    expect(parseSpokenDepth('חצי מטר', 'he-IL').leadingPoint).toBe(false);
+    expect(parseSpokenDepth('2.45', 'he-IL').leadingPoint).toBe(false);
+  });
+
+  describe('pickBestParse ranks across recognizer alternatives', () => {
+    it('THE reported scenario: clipped alt first, full alt second → 1.34 wins', () => {
+      const r = pickBestParse(['נקודה שלושים וארבע', 'אחד נקודה שלושים וארבע'], 'he-IL');
+      expect(r.value).toBe('1.34');
+      expect(r.candidates).toContain('0.34'); // the losing reading stays a tap away
+    });
+    it('order does not matter — full alt first still wins', () => {
+      expect(pickBestParse(['אחד נקודה שלושים וארבע', 'נקודה שלושים וארבע'], 'he-IL').value).toBe('1.34');
+    });
+    it('all alternatives clipped → best clipped parse, flagged for the caller', () => {
+      const r = pickBestParse(['נקודה שלושים וארבע', 'נקודה שלושים'], 'he-IL');
+      expect(r.value).toBe('0.34');
+      expect(r.leadingPoint).toBe(true);
+    });
+    it('no alternative parses → null result', () => {
+      expect(pickBestParse(['hello', 'there'], 'en-US').value).toBeNull();
+    });
+    it('single string input works too', () => {
+      expect(pickBestParse('2.45', 'he-IL').value).toBe('2.45');
+    });
+    it('in-range beats out-of-range across alternatives', () => {
+      // alt0 parses to a flat out-of-range 40; alt1 is the intended 1.34
+      const r = pickBestParse(['ארבעים מטר', 'אחד נקודה שלושים וארבע'], 'he-IL');
+      expect(r.value).toBe('1.34');
+    });
+  });
 });
 
 describe('adversarial sweep — 90 attack cases (2026-07-23)', () => {

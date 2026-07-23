@@ -15,16 +15,16 @@
  *
  * Everything here is additive and touches no existing flow.
  */
-import { parseSpokenDepth, VOICE_LANGS, langFamily } from './number-parser.js';
+import { pickBestParse, VOICE_LANGS, langFamily } from './number-parser.js';
 
 const FLAG_KEY = 'voiceDepthTest';
 const STYLE_ID = 'voice-depth-test-styles';
 
 // Minimal three-language label table — a test surface needs ~8 words, not a locale.
 const LABELS = {
-  he: { title: 'בדיקת קול — עומק', hold: 'לחץ ודבר', listening: 'מקשיב…', heard: 'נשמע', parsed: 'זוהה', none: 'לא זוהה מספר', confirm: 'אישור', again: 'שוב', close: 'סגור', pick: 'בחר שפה', noApi: 'דפדפן זה לא תומך בזיהוי דיבור', denied: 'אין הרשאת מיקרופון', network: 'אין חיבור לרשת לזיהוי', nospeech: 'לא נשמע דיבור', wouldSet: 'יוגדר עומק' },
-  ar: { title: 'اختبار الصوت — العمق', hold: 'اضغط وتكلم', listening: 'يستمع…', heard: 'سُمع', parsed: 'مُحلّل', none: 'لم يُعرف رقم', confirm: 'تأكيد', again: 'مرة أخرى', close: 'إغلاق', pick: 'اختر اللغة', noApi: 'هذا المتصفح لا يدعم التعرف على الكلام', denied: 'لا إذن للميكروفون', network: 'لا اتصال بالشبكة للتعرف', nospeech: 'لم يُسمع كلام', wouldSet: 'سيُضبط العمق' },
-  en: { title: 'Voice test — depth', hold: 'Hold & speak', listening: 'Listening…', heard: 'Heard', parsed: 'Parsed', none: 'No number recognized', confirm: 'Confirm', again: 'Again', close: 'Close', pick: 'Language', noApi: 'This browser has no speech recognition', denied: 'Microphone permission denied', network: 'No network for recognition', nospeech: 'No speech detected', wouldSet: 'Would set depth' },
+  he: { title: 'בדיקת קול — עומק', hold: 'לחץ ודבר', starting: 'רגע…', listening: 'דבר עכשיו', heard: 'נשמע', parsed: 'זוהה', none: 'לא זוהה מספר', confirm: 'אישור', again: 'שוב', close: 'סגור', pick: 'בחר שפה', noApi: 'דפדפן זה לא תומך בזיהוי דיבור', denied: 'אין הרשאת מיקרופון', network: 'אין חיבור לרשת לזיהוי', nospeech: 'לא נשמע דיבור', wouldSet: 'יוגדר עומק', clipped: 'ייתכן שהמילה הראשונה נחתכה — המתן לסימון ואמור שוב' },
+  ar: { title: 'اختبار الصوت — العمق', hold: 'اضغط وتكلم', starting: 'لحظة…', listening: 'تكلم الآن', heard: 'سُمع', parsed: 'مُحلّل', none: 'لم يُعرف رقم', confirm: 'تأكيد', again: 'مرة أخرى', close: 'إغلاق', pick: 'اختر اللغة', noApi: 'هذا المتصفح لا يدعم التعرف على الكلام', denied: 'لا إذن للميكروفون', network: 'لا اتصال بالشبكة للتعرف', nospeech: 'لم يُسمع كلام', wouldSet: 'سيُضبط العمق', clipped: 'ربما انقطعت الكلمة الأولى — انتظر الإشارة وقل مرة أخرى' },
+  en: { title: 'Voice test — depth', hold: 'Hold & speak', starting: 'One sec…', listening: 'Speak now', heard: 'Heard', parsed: 'Parsed', none: 'No number recognized', confirm: 'Confirm', again: 'Again', close: 'Close', pick: 'Language', noApi: 'This browser has no speech recognition', denied: 'Microphone permission denied', network: 'No network for recognition', nospeech: 'No speech detected', wouldSet: 'Would set depth', clipped: 'First word may have been cut — wait for the cue, then say it again' },
 };
 
 const LANG_CHIPS = [
@@ -230,24 +230,23 @@ function render(result) {
   }
 }
 
-/**
- * Pick the best result across recognition alternatives: run each transcript
- * through the parser and prefer the first that yields a value.
- */
-function bestOf(transcripts) {
-  let fallback = null;
-  for (const tr of transcripts) {
-    const r = parseSpokenDepth(tr, curFam);
-    if (!fallback) fallback = r;
-    if (r.value) return r;
+/** Short haptic cue where supported (TSC5/Android); silently no-ops elsewhere. */
+function buzz(ms) {
+  if (navigator.vibrate) {
+    try { navigator.vibrate(ms); } catch (_) { /* ignore */ }
   }
-  return fallback || { value: null, candidates: [], unit: null, raw: transcripts[0] || '', ambiguous: false };
 }
 
-function setMic(live) {
+function setMic(state) {
+  // state: 'idle' | 'starting' | 'live'. The 'live' flip happens on audiostart —
+  // the moment the engine actually captures — so the user doesn't out-talk the
+  // mic and lose the first word (field bug: spoken 1.34 heard as «נקודה שלושים
+  // וארבע» → 0.34).
   const btn = overlayEl.querySelector('.vdt-mic');
-  btn.classList.toggle('live', live);
-  overlayEl.querySelector('.vdt-mic-label').textContent = live ? L().listening : L().hold;
+  btn.classList.toggle('live', state === 'live');
+  const l = L();
+  overlayEl.querySelector('.vdt-mic-label').textContent =
+    state === 'live' ? l.listening : state === 'starting' ? l.starting : l.hold;
 }
 
 function toggleListen() {
@@ -267,10 +266,11 @@ function startListen() {
   recog.interimResults = true;
   recog.maxAlternatives = 5;
 
-  recog.onstart = () => { listening = true; setMic(true); msg(''); };
+  recog.onstart = () => { listening = true; setMic('starting'); msg(''); };
+  recog.onaudiostart = () => { setMic('live'); buzz(10); }; // "speak now" cue
   recog.onerror = (e) => {
     listening = false;
-    setMic(false);
+    setMic('idle');
     const code = e && e.error;
     if (code === 'not-allowed' || code === 'service-not-allowed') msg(L().denied);
     else if (code === 'network') msg(L().network);
@@ -278,14 +278,19 @@ function startListen() {
     else if (code === 'language-not-supported') msg(`${L().noApi} (${recog.lang})`);
     else if (code !== 'aborted') msg(String(code || 'error'));
   };
-  recog.onend = () => { listening = false; setMic(false); };
+  recog.onend = () => { listening = false; setMic('idle'); };
   recog.onresult = (ev) => {
     const alts = [];
     for (let i = ev.resultIndex; i < ev.results.length; i++) {
       const res = ev.results[i];
       for (let j = 0; j < res.length; j++) alts.push(res[j].transcript);
     }
-    if (alts.length) render(bestOf(alts));
+    if (!alts.length) return;
+    // Field debugging: what did the engine actually offer?
+    console.log('[voice-depth-test] alternatives:', alts);
+    const best = pickBestParse(alts, curFam);
+    render(best);
+    if (best.leadingPoint) msg('⚠ ' + L().clipped);
   };
 
   try { recog.start(); } catch (err) { msg(String(err && err.message ? err.message : err)); }
@@ -294,7 +299,7 @@ function startListen() {
 function stopListen() {
   try { recog && recog.stop(); } catch (_) { /* ignore */ }
   listening = false;
-  setMic(false);
+  setMic('idle');
 }
 
 function onConfirm() {
