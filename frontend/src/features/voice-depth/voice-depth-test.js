@@ -83,6 +83,8 @@ function ensureStyles() {
   .vdt-value.none{font-size:14px;color:#F2A33C;font-family:inherit;font-weight:600}
   .vdt-unit{font-size:15px;color:#8fa3a6}
   .vdt-cands{display:flex;flex-wrap:wrap;gap:6px;margin-block-start:6px}
+  .vdt-alts{margin-block-start:8px;font-family:ui-monospace,Consolas,monospace;font-size:10px;
+    color:#5f7276;direction:ltr;unicode-bidi:plaintext;word-break:break-all}
   .vdt-cand{padding:4px 10px;border:1px solid #33454c;border-radius:14px;background:#111a1c;
     color:#cdd8d6;font-family:ui-monospace,Consolas,monospace;font-size:13px;cursor:pointer}
   .vdt-cand.sel{border-color:#2FBE8E;color:#2FBE8E}
@@ -119,6 +121,7 @@ function build() {
         <div class="vdt-row"><span class="vdt-k vdt-k-heard"></span><span class="vdt-heard"></span></div>
         <div class="vdt-row"><span class="vdt-k vdt-k-parsed"></span><span class="vdt-value none"></span><span class="vdt-unit"></span></div>
         <div class="vdt-cands"></div>
+        <div class="vdt-alts" hidden></div>
       </div>
       <div class="vdt-actions">
         <button class="vdt-btn vdt-again" type="button"></button>
@@ -178,6 +181,9 @@ function resetReadout() {
   v.classList.add('none');
   q('.vdt-unit').textContent = '';
   q('.vdt-cands').innerHTML = '';
+  const altsEl = q('.vdt-alts');
+  altsEl.hidden = true;
+  altsEl.textContent = '';
   q('.vdt-confirm').disabled = true;
   msg('');
 }
@@ -286,8 +292,15 @@ function startListen() {
       for (let j = 0; j < res.length; j++) alts.push(res[j].transcript);
     }
     if (!alts.length) return;
-    // Field debugging: what did the engine actually offer?
+    // Field debugging: what did the engine actually offer? Shown in the dialog
+    // (with codepoints for non-ASCII punctuation — dot-lookalikes are invisible
+    // to the eye, field bug #3) and logged.
     console.log('[voice-depth-test] alternatives:', alts);
+    const altsEl = overlayEl.querySelector('.vdt-alts');
+    altsEl.hidden = false;
+    altsEl.textContent = alts
+      .map((a) => a.replace(/[^\p{L}\p{N} ]/gu, (ch) => `[U+${ch.codePointAt(0).toString(16).toUpperCase()}]`))
+      .join('  |  ');
     const best = pickBestParse(alts, curFam);
     render(best);
     if (best.leadingPoint) msg('⚠ ' + L().clipped);

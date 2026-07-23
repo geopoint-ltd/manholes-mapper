@@ -102,7 +102,18 @@ function normalize(input) {
       .replace(/[٬،؛]/g, ' ') // ٬ ، ؛ → space
       .replace(/[׳״'"]/g, '') // Hebrew geresh/gershayim, quotes (so the cm/m abbreviations match)
       .replace(/[,]/g, '.')
+      // Dot-LOOKALIKES: recognizers emit these for the spoken decimal word, and in
+      // RTL display they are indistinguishable from a period (field bug 2026-07-23
+      // #3: «אחד· שתיים שלוש» for a spoken 1.23 — the · glued to אחד killed the
+      // token and the 1 was dropped). Middle dots, Arabic full stop ۔, Hebrew sof
+      // pasuq ׃, colon — all mean "point" here.
+      .replace(/[·∙•‧⋅۔׃:]/g, '.')
       .replace(/[‒-―−]/g, ' ') // dashes → space (never part of a number)
+      // Any remaining punctuation is junk that must never eat a number word —
+      // replace with a space so the word beside it survives tokenization.
+      // Letters, combining marks (Arabic harakat / Hebrew niqqud stay INSIDE
+      // their word), digits, dots and whitespace pass through.
+      .replace(/[^\p{L}\p{M}\p{N}.\s]/gu, ' ')
       // Recognizers glue digits onto words when speech is fast — split every
       // letter↔digit boundary so the pieces tokenize separately.
       .replace(/(\d)(?=\p{L})/gu, '$1 ')

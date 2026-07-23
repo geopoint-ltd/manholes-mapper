@@ -237,6 +237,36 @@ describe('junk & edge input', () => {
   it('whitespace only → null', () => expect(val('   ', 'he-IL')).toBeNull());
 });
 
+describe('field bug 2026-07-23 #3 — dot-lookalike punctuation (spoken 1.23 became 0.23)', () => {
+  // The recognizer glued a NON-ASCII mark to «אחד» that renders exactly like a
+  // period in RTL display; the corrupted token dropped the 1.
+  it('middle dot · acts as the decimal marker', () => {
+    expect(parseSpokenDepth('אחד· שתיים שלוש', 'he-IL').value).toBe('1.23');
+  });
+  it('Arabic full stop ۔ acts as the decimal marker', () => {
+    expect(parseSpokenDepth('אחד۔ שתיים שלוש', 'he-IL').value).toBe('1.23');
+  });
+  it('Hebrew sof pasuq ׃ acts as the decimal marker', () => {
+    expect(parseSpokenDepth('אחד׃ שתיים שלוש', 'he-IL').value).toBe('1.23');
+  });
+  it('colon acts as the decimal marker', () => {
+    expect(parseSpokenDepth('אחד: שתיים שלוש', 'he-IL').value).toBe('1.23');
+  });
+  it('the ASCII form still works, with and without space', () => {
+    expect(parseSpokenDepth('אחד. שתיים שלוש', 'he-IL').value).toBe('1.23');
+    expect(parseSpokenDepth('אחד.שתיים שלוש', 'he-IL').value).toBe('1.23');
+  });
+  it('other stray punctuation never eats a number word', () => {
+    // '?' is junk, not a decimal marker — the words survive and concatenate
+    const r = parseSpokenDepth('אחד? שתיים שלוש', 'he-IL');
+    expect(r.candidates).toContain('1.23'); // 123 → cm reading
+    expect(r.value).toBe('1.23');
+  });
+  it('Arabic harakat inside a word are untouched by the junk filter', () => {
+    expect(parseSpokenDepth('مِتْر وَرُبْع', 'ar-IL').value).toBe('1.25');
+  });
+});
+
 describe('field bug 2026-07-23 #2 — clipped first word (spoken 1.34 became 0.34)', () => {
   it('every complete form of 1.34 parses to 1.34', () => {
     for (const t of ['אחד נקודה שלושים וארבע', 'אחת נקודה שלושים וארבע', 'מטר שלושים וארבע', 'אחד. שלושים וארבע', '1.34']) {
