@@ -8,7 +8,11 @@ export default defineConfig({
   plugins: [
     react(),
   ],
-  base: '/',
+  // Vercel serves the app from the domain root; GitHub Pages serves it from
+  // /<repo>/. Relative asset URLs work for both (routing is hash-based, so the
+  // directory the page is served from never changes). Override with VITE_BASE
+  // if a deployment ever needs an absolute base.
+  base: process.env.VITE_BASE || '/',
   cacheDir: process.env.VITE_CACHE_DIR || 'node_modules/.vite',
   build: {
     rollupOptions: {
