@@ -31,10 +31,6 @@ jobs:
         run: npm ci
 
       - name: Build
-        # Pages serves the app from /<repo>/, not the domain root, so the built
-        # asset URLs must be relative. Vercel builds without this and keeps '/'.
-        env:
-          VITE_BASE: './'
         run: npm run build
 
       - name: Setup Pages
@@ -43,7 +39,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: frontend/dist
+          path: dist
 
       - name: Deploy to GitHub Pages
         id: deployment
